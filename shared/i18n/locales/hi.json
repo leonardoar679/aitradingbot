@@ -2536,5 +2536,7 @@
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "दिशा: अज्ञात। 2024 से 2026 के 24 हैक में, दूसरे दिन से पीड़ित के अपने टोकन पर शॉर्ट 12 में मुनाफ़े में और 12 में घाटे में रहा: कोई भरोसेमंद दिशा नहीं।",
   "Allowing for how many were analysed, {beyond} of them still read as skill.": "कितनों का विश्लेषण हुआ, यह ध्यान में रखने पर भी उनमें से {beyond} अब भी कौशल के रूप में पढ़े जाते हैं।",
   "A follower five minutes late, as OKX shows positions: {net} a trip": "पाँच मिनट देर से फ़ॉलो करने वाला, जैसे OKX पोज़िशन दिखाता है: प्रति ट्रिप {net}",
-  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX किसी लीड ट्रेडर की पोज़िशन उनके ट्रेड के लगभग पाँच मिनट बाद दिखाता है, इसलिए फ़ॉलो सात मिनट तक देर से प्रवेश करता है।"
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX किसी लीड ट्रेडर की पोज़िशन उनके ट्रेड के लगभग पाँच मिनट बाद दिखाता है, इसलिए फ़ॉलो सात मिनट तक देर से प्रवेश करता है।",
+  "Partly read: {reads} of its reads failed. It is analysed again {hours} hours after this analysis.": "आंशिक रूप से पढ़ा गया: इसके {reads} पठन विफल रहे। इस विश्लेषण के {hours} घंटे बाद इसका फिर से विश्लेषण किया जाता है।",
+  "Partly read: {reads} of its reads failed, after {times} analyses.": "आंशिक रूप से पढ़ा गया: {times} विश्लेषणों के बाद भी इसके {reads} पठन विफल रहे।"
 }

@@ -81,8 +81,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // V9 Stage 8), from fc1f711b8c8a. 10 November 2026: a follow's leader lost after ten reads missed in a row, not two (V9
 // Stage 8), from 37f37138e51d. 16 November 2026: a victim named with a word of its part before its loss, and a theft told
 // as an authority's word read as its attribution (feed-v5; V9 Stage 8), from fb6ce8ade82b. 19 November 2026: funds moved out
-// unasked read as a theft, and a miners' theft as about crypto (feed-v6; V9 Stage 9), from 032fcf5e5d30.
-const PINNED_ENGINE_VERSION = '3b8dc5d5951f'
+// unasked read as a theft, and a miners' theft as about crypto (feed-v6; V9 Stage 9), from 032fcf5e5d30. The same day: a
+// found trader whose analysis lost reads analysed again six hours on, twice at most (V9 Stage 9), from 3b8dc5d5951f.
+const PINNED_ENGINE_VERSION = '8b4cd77a1a43'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

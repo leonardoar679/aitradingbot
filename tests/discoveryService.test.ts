@@ -210,6 +210,55 @@ describe('finding traders', () => {
     expect(state.found.find((entry) => entry.key === 'okx-AAAAAAAAAAAAAAA1')?.latest).toMatchObject({ followerNetPct: -0.09, followerDelayMin: 5 })
   })
 
+  it('analyses again from the record on file one whose analysis lost reads, six hours on and twice at most', async () => {
+    const { service, calls, clock, dir } = await setup()
+    // An outage while the first is analysed: two coins' bars are lost. The others are analysed whole.
+    let outage = true
+    const analyze = service.discoverySeam.analyze
+    service.discoverySeam.analyze = async (key) => {
+      const analysis = await analyze(key)
+      Object.assign(analysis, { problems: outage ? ["ETH's bars could not be read: fetch failed", "SOL's bars could not be read: fetch failed"] : [] })
+      return analysis
+    }
+    const first = `hyperliquid-${address(2)}`
+    await service.discoveryTurn()
+    expect(service.discoveryState().found.find((entry) => entry.key === first)).toMatchObject({ status: 'analysed', again: 0, latest: { unread: 2 } })
+    outage = false
+    for (const minutes of [30, 60, 90, 120]) {
+      clock.now = T0 + minutes * 60_000
+      await service.discoveryTurn()
+    }
+    expect(service.discoveryState().analysed).toBe(5)
+    const analyses = (): string[] => calls.filter((call) => call.what.startsWith('analyse') || call.what.startsWith('read')).map((call) => call.what)
+    calls.length = 0
+    // Six hours after its analysis, and not before: analysed again, its record not read anew, in the background lane.
+    clock.now = T0 + 6 * 3600_000 - 60_000
+    await service.discoveryTurn()
+    expect(analyses()).toEqual([])
+    expect(service.discoveryState().queued).toBe(0)
+    outage = true
+    clock.now = T0 + 6 * 3600_000
+    await service.discoveryTurn()
+    expect(analyses()).toEqual([`analyse ${first}`])
+    expect(calls.map((call) => call.lane)).toEqual(['background'])
+    // It lost reads again: six hours later once more, and then no more.
+    calls.length = 0
+    clock.now = T0 + 12 * 3600_000
+    await service.discoveryTurn()
+    clock.now = T0 + 17 * 3600_000
+    await service.discoveryTurn()
+    clock.now = T0 + 23 * 3600_000
+    await service.discoveryTurn()
+    expect(analyses()).toEqual([`analyse ${first}`])
+    expect(linesOf(dir).filter((line) => line.kind === 'again')).toEqual([
+      { kind: 'again', at: (T0 + 6 * 3600_000) / 1000, key: first, unread: 2 },
+      { kind: 'again', at: (T0 + 12 * 3600_000) / 1000, key: first, unread: 2 }
+    ])
+    expect(service.discoveryState().found.find((entry) => entry.key === first)).toMatchObject({ again: 2, latest: { unread: 2 } })
+    // The others read all they asked for: none analysed again.
+    expect(service.discoveryState().found.filter((entry) => entry.key !== first).map((entry) => entry.again)).toEqual([0, 0, 0, 0])
+  })
+
   it("keeps a venue's refusal as a skip, and goes on to the next", async () => {
     const { service, dir, refuse, calls, clock } = await setup()
     refuse.add(address(2))

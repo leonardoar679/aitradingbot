@@ -2536,5 +2536,7 @@
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "الاتجاه: غير معروف. في 24 اختراقًا بين 2024 و2026، ربح البيع على المكشوف لرمز الجهة المتضررة من اليوم الثاني في 12 وخسر في 12: لا اتجاه يُعتمد عليه.",
   "Allowing for how many were analysed, {beyond} of them still read as skill.": "مع احتساب عدد من جرى تحليلهم، لا يزال {beyond} منهم يُقرأ مهارةً.",
   "A follower five minutes late, as OKX shows positions: {net} a trip": "متابع متأخر خمس دقائق، كما تعرض OKX المراكز: {net} لكل صفقة",
-  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "تعرض OKX مراكز المتداول القائد بعد نحو خمس دقائق من تداوله، لذا تدخل المتابعة متأخرة حتى سبع دقائق."
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "تعرض OKX مراكز المتداول القائد بعد نحو خمس دقائق من تداوله، لذا تدخل المتابعة متأخرة حتى سبع دقائق.",
+  "Partly read: {reads} of its reads failed. It is analysed again {hours} hours after this analysis.": "قراءة جزئية: فشلت {reads} من قراءاته. يُحلَّل مرة أخرى بعد {hours} ساعات من هذا التحليل.",
+  "Partly read: {reads} of its reads failed, after {times} analyses.": "قراءة جزئية: فشلت {reads} من قراءاته، بعد {times} تحليلات."
 }

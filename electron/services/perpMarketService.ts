@@ -31,6 +31,19 @@ export const perpMarketSeam = {
  * connection should not cost it (found by V8 Stage 8's in-app check, 27 October 2026). */
 export const PERP_PRICE_RETRY_MS = 1000
 
+/** A page of bars that fails is asked once more after this long: one stalled page cost a trader's analysis a coin's
+ * whole series (v9-7d: 17 of the 63 found traders' analyses lost one to three coins so, most to the 15-second timeout). */
+export const PERP_BARS_RETRY_MS = 2000
+
+async function twice<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read()
+  } catch {
+    await perpMarketSeam.sleep(PERP_BARS_RETRY_MS)
+    return read()
+  }
+}
+
 async function json<T>(url: string): Promise<T> {
   const response = await perpMarketSeam.fetch(url)
   if (!response.ok) throw new Error(`${new URL(url).host} answered ${response.status}`)
@@ -84,8 +97,11 @@ export async function perpBars(venue: PerpVenue, symbol: string, interval: PerpI
     const left = Math.ceil((end - cursor) / step)
     if (venue === 'binance') {
       const limit = Math.min(1500, Math.max(1, left))
-      await perpMarketSeam.spendBinance(binanceKlinesWeight(limit))
-      const rows = await json<unknown[][]>(`${PERP_HOSTS.binance}/fapi/v1/klines?${new URLSearchParams({ symbol, interval, startTime: String(cursor * 1000), endTime: String(end * 1000 - 1), limit: String(limit) })}`)
+      const url = `${PERP_HOSTS.binance}/fapi/v1/klines?${new URLSearchParams({ symbol, interval, startTime: String(cursor * 1000), endTime: String(end * 1000 - 1), limit: String(limit) })}`
+      const rows = await twice(async () => {
+        await perpMarketSeam.spendBinance(binanceKlinesWeight(limit))
+        return json<unknown[][]>(url)
+      })
       let last = cursor - step
       for (const row of rows) {
         const candle = binanceRowOf(row)
@@ -100,14 +116,15 @@ export async function perpBars(venue: PerpVenue, symbol: string, interval: PerpI
       cursor = Math.max(cursor + limit * step, last + step)
     } else {
       const limit = Math.min(200, Math.max(1, left))
-      const rows = await bitget<unknown[][]>('history-candles', '/api/v2/mix/market/history-candles', {
+      const query = {
         symbol,
         productType: 'usdt-futures',
         granularity: BITGET_GRANULARITY[interval],
         startTime: String(cursor * 1000),
         endTime: String(Math.min(end, cursor + limit * step) * 1000),
         limit: String(limit)
-      })
+      }
+      const rows = await twice(() => bitget<unknown[][]>('history-candles', '/api/v2/mix/market/history-candles', query))
       for (const row of rows) {
         const candle = bitgetRowOf(row)
         if (candle !== null && candle.time >= cursor && candle.time < end) out.set(candle.time, candle)

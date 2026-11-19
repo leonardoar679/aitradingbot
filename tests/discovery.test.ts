@@ -165,7 +165,7 @@ describe('the record of what was found', () => {
       { kind: 'skipped', at: 2_500, key: boardKeyOf(third), why: 'OKX has no lead trader with that code' },
       { kind: 'found', version: DISCOVERY_LINES.version, at: 0, key: 'hyperliquid-0xold', rank: 1, board: row({ id: '0xold' }) }
     ]
-    const analysis: FoundAnalysis = { at: 3_000, trips: 40, netUsd: 120, skill: 'MARKET OR LUCK', clone: null, followerNetPct: -0.05, pSkill: 0.2 }
+    const analysis: FoundAnalysis = { at: 3_000, trips: 40, netUsd: 120, skill: 'MARKET OR LUCK', clone: null, followerNetPct: -0.05, followerDelayMin: 2, pSkill: 0.2, unread: 0 }
     const now = DISCOVERY_LINES.shownDays * 86_400 + 500
     const list = foundTradersOf(lines, new Map([[found.key, analysis]]), boardKeyOf(other), now)
     expect(list.map((entry) => [entry.key, entry.status])).toEqual([
@@ -177,16 +177,51 @@ describe('the record of what was found', () => {
     expect(list[2].latest).toEqual(analysis)
     // Waiting: neither analysed, nor analysing, nor skipped, nor tried too often.
     const waiting = foundTradersOf(lines, new Map(), null, now)
-    expect(queueOf(waiting, new Map())).toEqual([found.key, boardKeyOf(other)])
-    expect(queueOf(waiting, new Map([[found.key, DISCOVERY_LINES.maxAttempts]]))).toEqual([boardKeyOf(other)])
+    expect(queueOf(waiting, new Map(), now)).toEqual([found.key, boardKeyOf(other)])
+    expect(queueOf(waiting, new Map([[found.key, DISCOVERY_LINES.maxAttempts]]), now)).toEqual([boardKeyOf(other)])
     // Found again after a skip, a trader waits again.
     const again = foundTradersOf([...lines, { kind: 'found', version: DISCOVERY_LINES.version, at: 3_000, key: boardKeyOf(third), rank: 1, board: third }], new Map(), null, now)
     expect(again.find((entry) => entry.key === boardKeyOf(third))).toMatchObject({ status: 'queued', why: null })
   })
+
+  it('analyses again one whose analysis lost reads, six hours on and twice at most, after those never analysed', () => {
+    const other = row({ id: address(8) })
+    const older = row({ id: address(9) })
+    const lines: DiscoveryLine[] = [
+      found as DiscoveryLine,
+      { kind: 'found', version: DISCOVERY_LINES.version, at: 2_000, key: boardKeyOf(other), rank: 2, board: other },
+      { kind: 'found', version: DISCOVERY_LINES.version, at: 500, key: boardKeyOf(older), rank: 3, board: older }
+    ]
+    // ChinaToxicFlow2's, in v9-7d: 45 coins' bars lost to an outage.
+    const lost: FoundAnalysis = { at: 3_000, trips: 145, netUsd: 1_100, skill: 'SKILL', clone: null, followerNetPct: null, followerDelayMin: null, pSkill: 0.0001, unread: 45 }
+    const due = 3_000 + DISCOVERY_LINES.againAfterSeconds
+    const listed = (extra: DiscoveryLine[], analysis: FoundAnalysis = lost): ReturnType<typeof foundTradersOf> => foundTradersOf([...lines, ...extra], new Map([[found.key, analysis]]), null, due)
+    // Six hours after its analysis it is due, a second before not; the one never analysed goes first.
+    expect(queueOf(listed([]), new Map(), due)).toEqual([boardKeyOf(older), boardKeyOf(other), found.key])
+    expect(queueOf(listed([]), new Map(), due - 1)).toEqual([boardKeyOf(older), boardKeyOf(other)])
+    // An analysis that read all it asked for is not made again.
+    expect(queueOf(listed([], { ...lost, unread: 0 }), new Map(), due + 86_400)).toEqual([boardKeyOf(older), boardKeyOf(other)])
+    // Each time is a line read back, and counted: twice at most.
+    const again: DiscoveryLine = { kind: 'again', at: due, key: found.key, unread: 45 }
+    expect(readDiscoveryLine(again)).toEqual(again)
+    expect(readDiscoveryLine({ ...again, unread: '45' })).toBeNull()
+    expect(readDiscoveryLine({ ...again, key: 7 })).toBeNull()
+    expect(listed([again]).find((entry) => entry.key === found.key)?.again).toBe(1)
+    expect(listed([again]).find((entry) => entry.key === boardKeyOf(other))?.again).toBe(0)
+    expect(queueOf(listed([again]), new Map(), due)).toEqual([boardKeyOf(older), boardKeyOf(other), found.key])
+    expect(queueOf(listed([again, { ...again, at: due + 1 }]), new Map(), due + 2)).toEqual([boardKeyOf(older), boardKeyOf(other)])
+    // Nor one tried too often this session, nor one being analysed now.
+    expect(queueOf(listed([]), new Map([[found.key, DISCOVERY_LINES.maxAttempts]]), due)).toEqual([boardKeyOf(older), boardKeyOf(other)])
+    const analysing = foundTradersOf(lines, new Map([[found.key, lost]]), found.key, due)
+    expect(queueOf(analysing, new Map(), due)).toEqual([boardKeyOf(older), boardKeyOf(other)])
+    // Two due again: the older analysis first, whenever each was found.
+    const both = foundTradersOf(lines, new Map([[found.key, lost], [boardKeyOf(older), { ...lost, at: 3_500 }], [boardKeyOf(other), { ...lost, at: 2_500 }]]), null, due + 3_600)
+    expect(queueOf(both, new Map(), due + 3_600)).toEqual([boardKeyOf(other), found.key, boardKeyOf(older)])
+  })
 })
 
 describe('the found traders taken together', () => {
-  const analysis = (skill: string | null, pSkill: number | null): FoundAnalysis => ({ at: 1, trips: 100, netUsd: 1, skill, clone: null, followerNetPct: null, pSkill })
+  const analysis = (skill: string | null, pSkill: number | null): FoundAnalysis => ({ at: 1, trips: 100, netUsd: 1, skill, clone: null, followerNetPct: null, followerDelayMin: null, pSkill, unread: 0 })
   it("counts a SKILL as beyond chance only where its p, adjusted across all of them analysed, is within the test's line", () => {
     // One SKILL among a hundred analysed: its p of 0.0001 adjusts to 0.01, within the line; 0.0002 adjusts to 0.02.
     const rest = Array.from({ length: 99 }, () => analysis('MARKET OR LUCK', 0.5))

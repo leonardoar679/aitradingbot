@@ -2536,5 +2536,7 @@
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "Hướng: chưa biết. Trên 24 vụ hack từ 2024 đến 2026, bán khống token riêng của bên bị hại từ ngày thứ hai có lãi 12 lần và lỗ 12 lần: không có hướng đáng tin cậy.",
   "Allowing for how many were analysed, {beyond} of them still read as skill.": "Khi tính đến số người đã được phân tích, vẫn còn {beyond} người được xem là có kỹ năng.",
   "A follower five minutes late, as OKX shows positions: {net} a trip": "Người theo sau trễ năm phút, như OKX hiển thị vị thế: {net} mỗi lượt",
-  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX hiển thị vị thế của nhà giao dịch dẫn dắt khoảng năm phút sau khi họ giao dịch, nên lệnh theo vào trễ tới bảy phút."
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX hiển thị vị thế của nhà giao dịch dẫn dắt khoảng năm phút sau khi họ giao dịch, nên lệnh theo vào trễ tới bảy phút.",
+  "Partly read: {reads} of its reads failed. It is analysed again {hours} hours after this analysis.": "Đọc một phần: {reads} lần đọc thất bại. Sẽ phân tích lại {hours} giờ sau lần phân tích này.",
+  "Partly read: {reads} of its reads failed, after {times} analyses.": "Đọc một phần: {reads} lần đọc thất bại, sau {times} lần phân tích."
 }

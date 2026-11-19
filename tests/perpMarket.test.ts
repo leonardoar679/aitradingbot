@@ -98,6 +98,38 @@ describe('bars', () => {
     expect(urls.map((url) => Number(url.searchParams.get('startTime')) / 1000)).toEqual([from, listed + 1500 * step])
   })
 
+  it('ask a failed page once more two seconds later, its weight spent again, and fail where the second asking fails too', async () => {
+    const step = 60
+    const from = 1_790_000_000 - (1_790_000_000 % 60)
+    let pages = 0
+    const { module, urls, weights } = await market((url) => {
+      pages++
+      // The second page stalls once, as v9-7d's did.
+      if (pages === 2) throw new Error('The operation was aborted due to timeout')
+      const start = Number(url.searchParams.get('startTime')) / 1000
+      const limit = Number(url.searchParams.get('limit'))
+      const end = Number(url.searchParams.get('endTime')) / 1000
+      const rows: unknown[][] = []
+      for (let t = start; t < Math.min(end, from + 2000 * step) && rows.length < limit; t += step) rows.push(kline(t, t))
+      return json(rows)
+    })
+    const slept: number[] = []
+    module.perpMarketSeam.sleep = async (ms: number) => void slept.push(ms)
+    const bars = await module.perpBars('binance', 'BTCUSDT', '1m', from, from + 5000 * step)
+    expect(bars).toHaveLength(2000)
+    expect(slept).toEqual([module.PERP_BARS_RETRY_MS])
+    expect(module.PERP_BARS_RETRY_MS).toBe(2000)
+    expect(urls.map((url) => Number(url.searchParams.get('startTime')) / 1000 - from)).toEqual([0, 1500 * step, 1500 * step])
+    expect(weights).toEqual([10, 10, 10])
+    // Bitget's page refused twice: the read fails, after one pause.
+    const down = await market(() => json({}, 503))
+    const pauses: number[] = []
+    down.module.perpMarketSeam.sleep = async (ms: number) => void pauses.push(ms)
+    await expect(down.module.perpBars('bitget', 'ABCUSDT', '1h', from, from + 450 * 3600)).rejects.toThrow('api.bitget.com answered 503')
+    expect(pauses).toEqual([down.module.PERP_BARS_RETRY_MS])
+    expect(down.urls).toHaveLength(2)
+  })
+
   it('are read from Bitget 200 at a time over the whole span, in its granularity', async () => {
     const from = 1_790_000_000 - (1_790_000_000 % 3600)
     const { module, urls } = await market((url) => {

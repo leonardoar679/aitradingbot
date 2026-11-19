@@ -2536,5 +2536,7 @@
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "Arah: tidak diketahui. Pada 24 peretasan tahun 2024 hingga 2026, short atas token milik korban sejak hari kedua untung di 12 dan rugi di 12: tidak ada arah yang andal.",
   "Allowing for how many were analysed, {beyond} of them still read as skill.": "Dengan memperhitungkan berapa banyak yang dianalisis, {beyond} di antara mereka masih terbaca sebagai keahlian.",
   "A follower five minutes late, as OKX shows positions: {net} a trip": "Pengikut yang terlambat lima menit, sebagaimana OKX menampilkan posisi: {net} per trip",
-  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX menampilkan posisi trader utama sekitar lima menit setelah mereka bertransaksi, jadi pengikutan masuk hingga tujuh menit terlambat."
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX menampilkan posisi trader utama sekitar lima menit setelah mereka bertransaksi, jadi pengikutan masuk hingga tujuh menit terlambat.",
+  "Partly read: {reads} of its reads failed. It is analysed again {hours} hours after this analysis.": "Terbaca sebagian: {reads} pembacaannya gagal. Dianalisis lagi {hours} jam setelah analisis ini.",
+  "Partly read: {reads} of its reads failed, after {times} analyses.": "Terbaca sebagian: {reads} pembacaannya gagal, setelah {times} analisis."
 }

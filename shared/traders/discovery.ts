@@ -46,6 +46,12 @@ export const DISCOVERY_LINES = {
   okxMaxPages: 15,
   /** A found trader whose reading or analysis failed this many times in a session is left until the next. */
   maxAttempts: 3,
+  /** A found trader whose analysis could not read all it asked for -- a coin's bars or minutes, Bitcoin's hours, a
+   * venue's list of perpetuals -- is analysed again from the record on file this long after it, at most `maxAgain`
+   * times (v9-7d: 26 of 63 analyses lost reads, 9 of them 6 to 60 coins' in network outages, and two read TOO FEW on no
+   * trips at all for want of Bitcoin's hours). */
+  againAfterSeconds: 6 * 3600,
+  maxAgain: 2,
   /** Found traders the page lists, newest first. */
   shownDays: 60
 } as const
@@ -259,7 +265,15 @@ export interface HoldingsLine {
   calls: number
 }
 
-export type DiscoveryLine = BoardsLine | FoundLine | SkipLine | HoldingsLine
+/** A found trader analysed again, its last analysis having lost reads (DISCOVERY_LINES.againAfterSeconds): how many. */
+export interface AgainLine {
+  kind: 'again'
+  at: number
+  key: string
+  unread: number
+}
+
+export type DiscoveryLine = BoardsLine | FoundLine | SkipLine | HoldingsLine | AgainLine
 
 const isRow = (value: unknown): value is BoardRow => {
   const row = value as Partial<BoardRow> | null
@@ -268,12 +282,13 @@ const isRow = (value: unknown): value is BoardRow => {
 
 /** A stored line read as one; null for one out of shape. */
 export function readDiscoveryLine(value: unknown): DiscoveryLine | null {
-  const line = value as { kind?: unknown; at?: unknown; sources?: unknown; picked?: unknown; key?: unknown; rank?: unknown; board?: unknown; why?: unknown; day?: unknown; consensus?: unknown } | null
+  const line = value as { kind?: unknown; at?: unknown; sources?: unknown; picked?: unknown; key?: unknown; rank?: unknown; board?: unknown; why?: unknown; day?: unknown; consensus?: unknown; unread?: unknown } | null
   if (typeof line !== 'object' || line === null || typeof line.at !== 'number') return null
   if (line.kind === 'boards' && Array.isArray(line.sources) && Array.isArray(line.picked)) return line as unknown as BoardsLine
   if (line.kind === 'found' && typeof line.key === 'string' && typeof line.rank === 'number' && isRow(line.board) && boardKeyOf(line.board) === line.key) return line as unknown as FoundLine
   if (line.kind === 'skipped' && typeof line.key === 'string' && typeof line.why === 'string') return line as unknown as SkipLine
   if (line.kind === 'holdings' && typeof line.day === 'number' && Array.isArray(line.consensus)) return line as unknown as HoldingsLine
+  if (line.kind === 'again' && typeof line.key === 'string' && typeof line.unread === 'number') return line as unknown as AgainLine
   return null
 }
 
@@ -295,6 +310,8 @@ export interface FoundAnalysis {
   followerDelayMin: number | null
   /** The skill test's p: the larger of its two nulls' (both must be within its line); null where it ran neither. */
   pSkill: number | null
+  /** What it could not read, its problems counted: a coin's bars or minutes, Bitcoin's hours, a venue's list. */
+  unread: number
 }
 
 /** How many found traders still read as skill when their tests are taken together (V9-COPY-FORWARD: picked for their
@@ -324,6 +341,8 @@ export interface FoundTrader {
   status: FoundStatus
   why: string | null
   latest: FoundAnalysis | null
+  /** Times analysed again for reads an analysis lost. */
+  again: number
 }
 
 export interface DiscoveryState {
@@ -348,12 +367,19 @@ export interface DiscoveryState {
 
 export const EMPTY_DISCOVERY: DiscoveryState = { enabled: true, lastReadAt: null, sources: [], found: [], analysed: 0, beyondChance: 0, queued: 0, analysing: null, nextAnalysisAt: null, holdings: null }
 
-/** The found traders waiting for an analysis, the first found first: queued, and not tried too often this session. */
-export function queueOf(found: readonly FoundTrader[], attempts: ReadonlyMap<string, number>, maxAttempts: number = DISCOVERY_LINES.maxAttempts): string[] {
-  return found
-    .filter((entry) => entry.status === 'queued' && (attempts.get(entry.key) ?? 0) < maxAttempts)
-    .sort((a, b) => a.foundAt - b.foundAt || a.rank - b.rank)
-    .map((entry) => entry.key)
+/** Whether a found trader is to be analysed again: its last analysis lost reads, was made `againAfterSeconds` ago or
+ * more, and it has been analysed again fewer than `maxAgain` times. */
+export function againDue(trader: FoundTrader, nowSec: number): boolean {
+  return trader.status === 'analysed' && trader.latest !== null && trader.latest.unread > 0 && trader.again < DISCOVERY_LINES.maxAgain && nowSec - trader.latest.at >= DISCOVERY_LINES.againAfterSeconds
+}
+
+/** The found traders waiting for an analysis, none tried too often this session: those never analysed, the first found
+ * first, then those due again, the oldest analysis first. */
+export function queueOf(found: readonly FoundTrader[], attempts: ReadonlyMap<string, number>, nowSec: number, maxAttempts: number = DISCOVERY_LINES.maxAttempts): string[] {
+  const free = (entry: FoundTrader): boolean => (attempts.get(entry.key) ?? 0) < maxAttempts
+  const fresh = found.filter((entry) => entry.status === 'queued' && free(entry)).sort((a, b) => a.foundAt - b.foundAt || a.rank - b.rank)
+  const again = found.filter((entry) => againDue(entry, nowSec) && free(entry)).sort((a, b) => (a.latest?.at ?? 0) - (b.latest?.at ?? 0))
+  return [...fresh, ...again].map((entry) => entry.key)
 }
 
 /** The found traders as the page lists them: each one's last find, its status from the skips, the one analysing and the
@@ -367,11 +393,13 @@ export function foundTradersOf(
 ): FoundTrader[] {
   const found = new Map<string, FoundLine>()
   const skipped = new Map<string, SkipLine>()
+  const again = new Map<string, number>()
   for (const line of [...lines].sort((a, b) => a.at - b.at)) {
     if (line.kind === 'found') {
       found.set(line.key, line)
       skipped.delete(line.key)
     } else if (line.kind === 'skipped') skipped.set(line.key, line)
+    else if (line.kind === 'again') again.set(line.key, (again.get(line.key) ?? 0) + 1)
   }
   return [...found.values()]
     .filter((line) => nowSec - line.at <= shownDays * 86_400)
@@ -379,7 +407,7 @@ export function foundTradersOf(
       const latest = analyses.get(line.key) ?? null
       const skip = skipped.get(line.key) ?? null
       const status: FoundStatus = analysing === line.key ? 'analysing' : latest !== null ? 'analysed' : skip !== null ? 'skipped' : 'queued'
-      return { key: line.key, foundAt: line.at, rank: line.rank, board: line.board, status, why: status === 'skipped' ? (skip?.why ?? null) : null, latest }
+      return { key: line.key, foundAt: line.at, rank: line.rank, board: line.board, status, why: status === 'skipped' ? (skip?.why ?? null) : null, latest, again: again.get(line.key) ?? 0 }
     })
     .sort((a, b) => b.foundAt - a.foundAt || a.rank - b.rank)
 }

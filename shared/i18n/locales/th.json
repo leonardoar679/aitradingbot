@@ -2536,5 +2536,7 @@
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "ทิศทาง: ไม่ทราบ จากการแฮ็ก 24 ครั้งในปี 2024 ถึง 2026 การชอร์ตโทเคนของผู้เสียหายเองตั้งแต่วันที่สองได้กำไร 12 ครั้งและขาดทุน 12 ครั้ง: ไม่มีทิศทางที่เชื่อถือได้",
   "Allowing for how many were analysed, {beyond} of them still read as skill.": "เมื่อคำนึงถึงจำนวนที่วิเคราะห์แล้ว ยังมี {beyond} คนที่อ่านได้ว่าเป็นฝีมือ",
   "A follower five minutes late, as OKX shows positions: {net} a trip": "ผู้ติดตามที่ช้าไปห้านาที ตามที่ OKX แสดงโพซิชัน: {net} ต่อรอบ",
-  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX แสดงโพซิชันของเทรดเดอร์นำประมาณห้านาทีหลังจากที่เขาเทรด การติดตามจึงเข้าช้าได้ถึงเจ็ดนาที"
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX แสดงโพซิชันของเทรดเดอร์นำประมาณห้านาทีหลังจากที่เขาเทรด การติดตามจึงเข้าช้าได้ถึงเจ็ดนาที",
+  "Partly read: {reads} of its reads failed. It is analysed again {hours} hours after this analysis.": "อ่านได้บางส่วน: การอ่าน {reads} รายการล้มเหลว จะวิเคราะห์อีกครั้ง {hours} ชั่วโมงหลังการวิเคราะห์นี้",
+  "Partly read: {reads} of its reads failed, after {times} analyses.": "อ่านได้บางส่วน: การอ่าน {reads} รายการล้มเหลว หลังวิเคราะห์ {times} ครั้ง"
 }

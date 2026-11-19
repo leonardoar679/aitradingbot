@@ -13,7 +13,8 @@ import { utcWhen } from './traderText'
 // two minutes late, the delay test's shortest delay, would have made a trip. Their verdicts describe them: they were picked for their past profit. Opening one
 // shows their cards below, with Follow on paper -- the person's own click; the app follows no one by itself. The switch
 // stops or starts the daily reading. Since V9 Stage 4 the card also says what the analysed found traders held when last
-// read, coin by coin: context, never a call shown (V9-TOP-TRADERS-2 judges it after sixty days).
+// read, coin by coin: context, never a call shown (V9-TOP-TRADERS-2 judges it after sixty days). Since V9 Stage 9 an
+// analysis that lost reads says so, and that it is made again six hours on, or how many times it was made.
 
 /** Coins listed of what they hold, the most held first. */
 const HELD_SHOWN = 8
@@ -140,6 +141,15 @@ export function FoundTradersView({ state, busy, onToggle, onOpen }: { state: Dis
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{trader.latest.followerDelayMin === 5
                             ? t('A follower five minutes late, as OKX shows positions: {net} a trip', { net: i18n.pct(trader.latest.followerNetPct, 2) })
                             : t('A follower two minutes late: {net} a trip', { net: i18n.pct(trader.latest.followerNetPct, 2) })}</div>
+                        )}
+                        {trader.latest.unread > 0 && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            {trader.status === 'analysing'
+                              ? t(STATUS_WORDS.analysing)
+                              : trader.again < DISCOVERY_LINES.maxAgain
+                                ? t('Partly read: {reads} of its reads failed. It is analysed again {hours} hours after this analysis.', { reads: num(trader.latest.unread, 0, 0), hours: num(DISCOVERY_LINES.againAfterSeconds / 3600, 0, 0) })
+                                : t('Partly read: {reads} of its reads failed, after {times} analyses.', { reads: num(trader.latest.unread, 0, 0), times: num(trader.again + 1, 0, 0) })}
+                          </div>
                         )}
                       </span>
                     )}

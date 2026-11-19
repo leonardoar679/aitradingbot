@@ -47,7 +47,9 @@ const OKX_FOLLOWER_DELAY_MIN = 5
 // (through okxGet, its budget) and Hyperliquid's leaderboard (one GET of a 39 MB file, read in the worker) are read, the
 // rule picks at most ten traders not on file yet, and each is kept as found in discovery/discovery-YYYY-MM.jsonl. Then,
 // one at a time and at least half an hour after the last ended, each found trader is read and analysed as a pasted one
-// is (traderService.ts importTrader and analyzeTrader). Everything here runs in the background lane of the request
+// is (traderService.ts importTrader and analyzeTrader); one whose analysis lost reads, to an outage or a stalled page,
+// is analysed again from the record on file six hours on, twice at most (V9 Stage 9, 19 November 2026: in v9-7d 26 of
+// 63 analyses lost reads, and nothing read them again). Everything here runs in the background lane of the request
 // budgets (httpPacing.ts inBackground): a paper follow's reads go first. Switched off (settings `discovery.enabled`
 // false), it reads nothing. It reads public data and keeps what it read: no key, no model, no order, no one followed.
 //
@@ -165,7 +167,8 @@ export function foundAnalysisOf(analysis: TraderAnalysis): FoundAnalysis {
     clone: analysis.clone?.verdict ?? null,
     followerNetPct: late?.meanNetPct ?? null,
     followerDelayMin: late === null ? null : delayMin,
-    pSkill: typeof analysis.skill?.pShift === 'number' && typeof analysis.skill.pFlip === 'number' ? Math.max(analysis.skill.pShift, analysis.skill.pFlip) : null
+    pSkill: typeof analysis.skill?.pShift === 'number' && typeof analysis.skill.pFlip === 'number' ? Math.max(analysis.skill.pShift, analysis.skill.pFlip) : null,
+    unread: Array.isArray(analysis.problems) ? analysis.problems.length : 0
   }
 }
 
@@ -187,7 +190,7 @@ async function publish(): Promise<void> {
     analysed: [...everFound].filter((key) => analyses.has(key)).length,
     // Over the found traders alone: a trader pasted by hand was not picked by the rule.
     beyondChance: skillBeyondChance([...everFound].flatMap((key) => analyses.get(key) ?? [])),
-    queued: queueOf(found, attempts).length,
+    queued: queueOf(found, attempts, nowSec).length,
     analysing,
     nextAnalysisAt,
     holdings: held
@@ -277,24 +280,32 @@ async function readHoldings(): Promise<void> {
   await keep([{ kind: 'holdings', at: nowSec, day, traders: analysed.length - failed, failed, consensus, calls: recorded }])
 }
 
-/** Reads and analyses the first found trader waiting, where the half hour since the last has passed. */
+/** Reads and analyses the first found trader waiting, where the half hour since the last has passed: one never
+ * analysed, else one whose last analysis lost reads, analysed again from the record on file. */
 async function analyseNext(): Promise<void> {
   const nowMs = discoverySeam.nowMs()
   if (analysing !== null || (lastAnalysisEndMs !== null && nowMs - lastAnalysisEndMs < DISCOVERY_LINES.analysisGapSeconds * 1000)) return
-  const key = queueOf(state.found, attempts)[0]
+  const key = queueOf(state.found, attempts, Math.floor(nowMs / 1000))[0]
   if (key === undefined) return
   const found = state.found.find((entry) => entry.key === key)
   if (found === undefined) return
+  const lost = found.status === 'analysed' ? (found.latest?.unread ?? 0) : 0
   analysing = key
   await publish()
   try {
-    const read = await discoverySeam.read(found.board.id)
-    // A venue's refusal, or a record too short for the tests (an account trading too fast for Hyperliquid's window of
-    // fills), is kept as a skip with why; only a record the tests can read is analysed.
-    const short = 'refused' in read ? null : shortRecordOf(read)
-    if ('refused' in read) await keep([{ kind: 'skipped', at: Math.floor(discoverySeam.nowMs() / 1000), key, why: read.refused }])
-    else if (short !== null) await keep([{ kind: 'skipped', at: Math.floor(discoverySeam.nowMs() / 1000), key, why: short }])
-    else await discoverySeam.analyze(key)
+    if (lost > 0) {
+      // Kept first: an analysis that never ends still counts against the times it may be made again.
+      await keep([{ kind: 'again', at: Math.floor(nowMs / 1000), key, unread: lost }])
+      await discoverySeam.analyze(key)
+    } else {
+      const read = await discoverySeam.read(found.board.id)
+      // A venue's refusal, or a record too short for the tests (an account trading too fast for Hyperliquid's window of
+      // fills), is kept as a skip with why; only a record the tests can read is analysed.
+      const short = 'refused' in read ? null : shortRecordOf(read)
+      if ('refused' in read) await keep([{ kind: 'skipped', at: Math.floor(discoverySeam.nowMs() / 1000), key, why: read.refused }])
+      else if (short !== null) await keep([{ kind: 'skipped', at: Math.floor(discoverySeam.nowMs() / 1000), key, why: short }])
+      else await discoverySeam.analyze(key)
+    }
   } catch (error) {
     const tried = (attempts.get(key) ?? 0) + 1
     attempts.set(key, tried)

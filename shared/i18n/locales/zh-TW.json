@@ -2536,5 +2536,7 @@
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "方向：未知。在 2024 至 2026 年的 24 起駭客攻擊中，從第二天起做空受害方自己的代幣，12 次獲利、12 次虧損：沒有可靠的方向。",
   "Allowing for how many were analysed, {beyond} of them still read as skill.": "考慮到已分析的人數，其中仍有 {beyond} 人可視為有實力。",
   "A follower five minutes late, as OKX shows positions: {net} a trip": "晚五分鐘的跟單者（OKX 顯示倉位的延遲）：每筆 {net}",
-  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX 在帶單交易員交易後約五分鐘才顯示其倉位，因此跟單最多晚七分鐘進場。"
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX 在帶單交易員交易後約五分鐘才顯示其倉位，因此跟單最多晚七分鐘進場。",
+  "Partly read: {reads} of its reads failed. It is analysed again {hours} hours after this analysis.": "部分讀取：{reads} 次讀取失敗。將在本次分析 {hours} 小時後重新分析。",
+  "Partly read: {reads} of its reads failed, after {times} analyses.": "部分讀取：經過 {times} 次分析，仍有 {reads} 次讀取失敗。"
 }

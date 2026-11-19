@@ -36,7 +36,8 @@ const state: DiscoveryState = {
       board: { venue: 'hyperliquid', id: '0x7fdafde5cfb5465924316eced2d3715494c517d1', name: 'BobbyBigSize', accountUsd: 47_859_298, pnlAllTime: 159_854_473, last30d: 33_262_401, volume30d: 2.46e9, leadDays: null, copiers: null, winRatio: null },
       status: 'analysed',
       why: null,
-      latest: { at: FOUND_AT + 600, trips: 412, netUsd: 1_250_000, skill: 'MARKET OR LUCK', clone: null, followerNetPct: -0.04, followerDelayMin: 2, pSkill: 0.3 }
+      latest: { at: FOUND_AT + 600, trips: 412, netUsd: 1_250_000, skill: 'MARKET OR LUCK', clone: null, followerNetPct: -0.04, followerDelayMin: 2, pSkill: 0.3, unread: 0 },
+      again: 0
     },
     {
       key: 'okx-F6476365DB0D09A3',
@@ -45,7 +46,8 @@ const state: DiscoveryState = {
       board: { venue: 'okx', id: 'F6476365DB0D09A3', name: 'maomao12345', accountUsd: 15_600, pnlAllTime: 2_755_220, last30d: 0.12, volume30d: null, leadDays: 1132, copiers: 72, winRatio: 0.56 },
       status: 'queued',
       why: null,
-      latest: null
+      latest: null,
+      again: 0
     },
     {
       key: 'okx-AAAAAAAAAAAAAAA1',
@@ -54,7 +56,8 @@ const state: DiscoveryState = {
       board: { venue: 'okx', id: 'AAAAAAAAAAAAAAA1', name: 'gone', accountUsd: 60_000, pnlAllTime: 100_000, last30d: 0.05, volume30d: null, leadDays: 200, copiers: 3, winRatio: 0.5 },
       status: 'skipped',
       why: 'OKX has no lead trader with that code: they may have stopped leading.',
-      latest: null
+      latest: null,
+      again: 0
     }
   ],
   analysed: 1,
@@ -112,6 +115,24 @@ describe('Found for you', () => {
     expect(html).toContain('What they held when read, 7 Nov 00:04 UTC:')
     expect(html).toContain('BTC: 5 long, 1 short · ETH: 1 long, 2 short')
     expect(html).toContain('Context, not a call.')
+  })
+
+  it('says where an analysis lost reads: that it is made again six hours on, or how many times it was made', async () => {
+    const { FoundTradersView } = await import('../src/traders/FoundTradersCard')
+    const view = async (status: 'analysed' | 'analysing', again: number): Promise<string> => {
+      const found = state.found.map((entry) => (entry.latest === null ? entry : { ...entry, status, again, latest: { ...entry.latest, unread: 45 } }))
+      return render(createElement(FoundTradersView, { state: { ...state, found }, busy: false, onToggle: () => undefined, onOpen: () => undefined }))
+    }
+    expect(await view('analysed', 0)).toContain('Partly read: 45 of its reads failed. It is analysed again 6 hours after this analysis.')
+    expect(await view('analysed', DISCOVERY_LINES.maxAgain - 1)).toContain('It is analysed again 6 hours after this analysis.')
+    expect(await view('analysed', DISCOVERY_LINES.maxAgain)).toContain('Partly read: 45 of its reads failed, after 3 analyses.')
+    const analysing = await view('analysing', 1)
+    expect(analysing).toContain('being analysed now')
+    expect(analysing).not.toContain('Partly read')
+    // An analysis that read all it asked for says nothing of it.
+    const whole = await render(createElement(FoundTradersView, { state, busy: false, onToggle: () => undefined, onOpen: () => undefined }))
+    expect(whole).not.toContain('Partly read')
+    expect(whole).not.toContain('being analysed now')
   })
 
   it('says when none is found yet, and when finding is off', async () => {

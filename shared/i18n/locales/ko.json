@@ -2536,5 +2536,7 @@
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "방향: 알 수 없음. 2024~2026년의 해킹 24건에서 둘째 날부터 피해자 자체 토큰을 숏하면 12건은 수익, 12건은 손실이었습니다. 믿을 만한 방향이 없습니다.",
   "Allowing for how many were analysed, {beyond} of them still read as skill.": "분석한 인원수를 감안해도 그중 {beyond}명은 여전히 실력으로 읽힙니다.",
   "A follower five minutes late, as OKX shows positions: {net} a trip": "5분 늦은 팔로워(OKX가 포지션을 보여 주는 시차): 왕복당 {net}",
-  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX는 리드 트레이더의 포지션을 거래 후 약 5분 뒤에 보여 주므로, 팔로우는 최대 7분 늦게 진입합니다."
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX는 리드 트레이더의 포지션을 거래 후 약 5분 뒤에 보여 주므로, 팔로우는 최대 7분 늦게 진입합니다.",
+  "Partly read: {reads} of its reads failed. It is analysed again {hours} hours after this analysis.": "일부만 읽음: 읽기 {reads}건이 실패했습니다. 이 분석 {hours}시간 후에 다시 분석합니다.",
+  "Partly read: {reads} of its reads failed, after {times} analyses.": "일부만 읽음: 분석 {times}회 후에도 읽기 {reads}건이 실패했습니다."
 }

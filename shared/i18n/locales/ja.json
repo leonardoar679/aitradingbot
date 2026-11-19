@@ -2536,5 +2536,7 @@
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "方向：不明。2024〜2026年の24件のハッキングでは、2日目から被害者自身のトークンをショートすると12件で利益、12件で損失でした。信頼できる方向はありません。",
   "Allowing for how many were analysed, {beyond} of them still read as skill.": "分析した人数を考慮しても、そのうち {beyond} 人はなお実力と読めます。",
   "A follower five minutes late, as OKX shows positions: {net} a trip": "5分遅れのフォロワー（OKXがポジションを表示する遅れ）：1回あたり {net}",
-  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKXはリードトレーダーのポジションを取引の約5分後に表示するため、フォローは最大7分遅れでエントリーします。"
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKXはリードトレーダーのポジションを取引の約5分後に表示するため、フォローは最大7分遅れでエントリーします。",
+  "Partly read: {reads} of its reads failed. It is analysed again {hours} hours after this analysis.": "一部のみ読み取り：{reads} 件の読み取りに失敗しました。この分析の {hours} 時間後に再分析します。",
+  "Partly read: {reads} of its reads failed, after {times} analyses.": "一部のみ読み取り：{times} 回の分析後も {reads} 件の読み取りに失敗しました。"
 }
