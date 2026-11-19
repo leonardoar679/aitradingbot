@@ -1857,7 +1857,6 @@
   "the {exchange} key is for a Classic account": "{exchange} कुंजी क्लासिक खाते की है",
   "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "यह {exchange} कुंजी क्लासिक खाते की है: इसका बैलेंस पढ़ा जाता है, लेकिन असली ऑर्डर के लिए यूनिफ़ाइड ट्रेडिंग खाता चाहिए। Bitget पर खाता बदलें, फिर कनेक्शन पेज पर कुंजी फिर से टेस्ट करें।",
   "Its likely move ({move}) is under the {line} a {horizon} trade needs: no move worth its costs is forecast now.": "इसकी संभावित चाल ({move}) {horizon} ट्रेड के लिए ज़रूरी {line} से कम है: अभी लागत के लायक किसी चाल का पूर्वानुमान नहीं है।",
-  "not forecast: no way is known": "पूर्वानुमान नहीं: दिशा ज्ञात नहीं",
   "Moved 1% or more, last 90 days": "पिछले 90 दिनों में 1% या अधिक चाल",
   "Moved 2% or more, last 90 days": "पिछले 90 दिनों में 2% या अधिक चाल",
   "Touched 1% either way, last 90 days": "पिछले 90 दिनों में किसी भी दिशा में 1% छुआ",
@@ -2020,7 +2019,6 @@
   "Ask the Internet Archive when it first captured each link you paste (the link is sent to {host}): an upper bound on when it was published.": "इंटरनेट आर्काइव से पूछें कि उसने आपका चिपकाया हर लिंक पहली बार कब कैप्चर किया (लिंक {host} को भेजा जाता है): यह इसके प्रकाशन के समय की एक ऊपरी सीमा है।",
   "Every coin's call": "हर कॉइन की कॉल",
   "No forecast yet: the lines come with the forecast's first pass.": "अभी कोई पूर्वानुमान नहीं: पंक्तियाँ पूर्वानुमान के पहले दौर के साथ आती हैं।",
-  "Likely move (80%)": "संभावित चाल (80%)",
   "Moved {size}+ in its last 90 days": "पिछले 90 दिनों में {size}+ चाल",
   "Why": "क्यों",
   "to {time}; expected net {net}": "{time} तक; अपेक्षित शुद्ध नतीजा {net}",
@@ -2564,5 +2562,12 @@
   "The latest forecasts checked:": "हाल में जाँचे गए पूर्वानुमान:",
   "The found traders' consensus": "खोजे गए ट्रेडरों की आम राय",
   "The forecast at {horizon}: real moves {ratio} the size it expected, {in80} inside its 80% range": "{horizon} पर पूर्वानुमान: असली चालें अनुमानित आकार की {ratio} रहीं, {in80} उसकी 80% रेंज के अंदर",
-  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: {rising} बढ़त और {falling} गिरावट पर सही, {scored} जाँचे गए"
+  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: {rising} बढ़त और {falling} गिरावट पर सही, {scored} जाँचे गए",
+  "±{size}": "±{size}",
+  "Expected move, either way": "अनुमानित चाल, किसी भी दिशा में",
+  "{size}; 80% range {range}": "{size}; 80% रेंज {range}",
+  "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "अनुमानित चाल वह आकार है जिसकी पूर्वानुमान किसी भी दिशा में उम्मीद करता है; 9 से 16 नवंबर की सात दिन की रन में असली चालें उसकी 0.91 से 1.06 गुना रहीं।",
+  "Expected move {size} within {span}": "{span} में अनुमानित चाल {size}",
+  "not forecast: no way is known; the move it expects either way is {size}": "पूर्वानुमान नहीं: कोई दिशा ज्ञात नहीं; किसी भी दिशा में अनुमानित चाल {size}",
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "यह {horizon} में किसी भी दिशा में ±{size} की चाल की उम्मीद करता है: आकार मापा गया है, दिशा नहीं।"
 }

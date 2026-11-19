@@ -1857,7 +1857,6 @@
   "the {exchange} key is for a Classic account": "khóa {exchange} thuộc tài khoản Cổ điển",
   "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "Khóa {exchange} này thuộc tài khoản Cổ điển: số dư được đọc, nhưng lệnh thật cần Tài khoản Giao dịch Hợp nhất. Hãy chuyển đổi tài khoản trên Bitget, rồi kiểm tra lại khóa trong trang Kết nối.",
   "Its likely move ({move}) is under the {line} a {horizon} trade needs: no move worth its costs is forecast now.": "Biến động khả dĩ ({move}) thấp hơn mức {line} mà một giao dịch {horizon} cần: hiện không có dự báo nào về biến động đủ bù chi phí.",
-  "not forecast: no way is known": "không dự báo: chưa biết hướng",
   "Moved 1% or more, last 90 days": "Biến động từ 1% trở lên, 90 ngày qua",
   "Moved 2% or more, last 90 days": "Biến động từ 2% trở lên, 90 ngày qua",
   "Touched 1% either way, last 90 days": "Chạm 1% theo bất kỳ hướng nào, 90 ngày qua",
@@ -2020,7 +2019,6 @@
   "Ask the Internet Archive when it first captured each link you paste (the link is sent to {host}): an upper bound on when it was published.": "Hỏi Internet Archive xem lần đầu nó lưu mỗi liên kết bạn dán là khi nào (liên kết được gửi tới {host}): một cận trên cho thời điểm liên kết được đăng.",
   "Every coin's call": "Nhận định của từng coin",
   "No forecast yet: the lines come with the forecast's first pass.": "Chưa có dự báo: các dòng sẽ có khi dự báo chạy lượt đầu tiên.",
-  "Likely move (80%)": "Biến động khả dĩ (80%)",
   "Moved {size}+ in its last 90 days": "Biến động từ {size} trở lên trong 90 ngày qua",
   "Why": "Lý do",
   "to {time}; expected net {net}": "đến {time}; kết quả ròng kỳ vọng {net}",
@@ -2564,5 +2562,12 @@
   "The latest forecasts checked:": "Các dự báo được kiểm tra gần nhất:",
   "The found traders' consensus": "Đồng thuận của các nhà giao dịch được tìm thấy",
   "The forecast at {horizon}: real moves {ratio} the size it expected, {in80} inside its 80% range": "Dự báo ở {horizon}: biến động thực bằng {ratio} kích thước dự kiến, {in80} nằm trong khoảng 80%",
-  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: đúng {rising} lần tăng và {falling} lần giảm, đã chấm {scored}"
+  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: đúng {rising} lần tăng và {falling} lần giảm, đã chấm {scored}",
+  "±{size}": "±{size}",
+  "Expected move, either way": "Biến động dự kiến, theo hướng bất kỳ",
+  "{size}; 80% range {range}": "{size}; khoảng 80% {range}",
+  "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "Biến động dự kiến là mức độ mà dự báo kỳ vọng theo hướng bất kỳ; trong lần chạy bảy ngày từ 9 đến 16 tháng 11, biến động thực bằng 0,91 đến 1,06 lần mức đó.",
+  "Expected move {size} within {span}": "Biến động dự kiến {size} trong {span}",
+  "not forecast: no way is known; the move it expects either way is {size}": "không dự báo: chưa biết hướng; biến động dự kiến theo hướng bất kỳ là {size}",
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "Nó dự kiến biến động ±{size} theo hướng bất kỳ trong {horizon}: kích thước đã được đo, hướng thì chưa."
 }

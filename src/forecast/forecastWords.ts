@@ -2,6 +2,7 @@ import type { Direction } from '../../shared/forecast/direction'
 import type { Horizon } from '../../shared/forecast/features'
 import type { MarketShockState } from '../../shared/forecast/marketShock'
 import { ratesAt } from '../../shared/forecast/moveRates'
+import { expectedMove } from '../../shared/forecast/size'
 import type { ForecastRange, PricePrediction } from '../../shared/forecast/prediction'
 import { reasonText, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import type { PredictionView } from '../../shared/forecast/view'
@@ -296,7 +297,12 @@ export function predictionCardRows(prediction: PricePrediction, view: Prediction
     {
       id: 'expected',
       name: t('Expected price'),
-      value: leadRange === undefined || leadView === undefined ? '—' : wayKnown(leadRange) ? priceAndMove(leadRange.quantilePrices[2], leadView.medianPct) : t('not forecast: no way is known')
+      value:
+        leadRange === undefined || leadView === undefined
+          ? '—'
+          : wayKnown(leadRange)
+            ? priceAndMove(leadRange.quantilePrices[2], leadView.medianPct)
+            : t('not forecast: no way is known; the move it expects either way is {size}', { size: i18n.pctPlain(expectedMove(leadRange.quantilesPct), 2) })
     },
     { id: 'bull', name: t('Bull case'), value: leadView === undefined ? '—' : signedPct(leadView.bullPct, 2, i18n) },
     { id: 'bear', name: t('Bear case'), value: leadView === undefined ? '—' : signedPct(leadView.bearPct, 2, i18n) },

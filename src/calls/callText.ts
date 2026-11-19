@@ -2,6 +2,7 @@ import type { CardRefusal, DelistLiveReading, LateCall, PrimaryCallState, Primar
 import type { Horizon } from '../../shared/forecast/features'
 import type { PricePrediction } from '../../shared/forecast/prediction'
 import { ratesAt } from '../../shared/forecast/moveRates'
+import { expectedMove } from '../../shared/forecast/size'
 import { ENGLISH, msg, type I18n } from '../../shared/i18n/translate'
 
 // THE PRIMARY CALL IN WORDS (V8 Stage 3; in the person's language since V8 Stage 5). Plain functions of what the
@@ -167,6 +168,15 @@ export function likelyText(prediction: Pick<PricePrediction, 'horizons'>, horizo
   if (range === undefined) return null
   const q = range.quantilesPct
   return t('{low} to {high}', { low: pct(q[0], 2), high: pct(q[4], 2) })
+}
+
+/** The move a coin's forecast expects at a horizon, either way (V10 Stage 2: shared/forecast/size.ts): "±2.10%"; null
+ * where it has none. On the seven-day run of 9-16 November 2026 the real moves came to 0.91 to 1.06 times it. */
+export function expectedMoveText(prediction: Pick<PricePrediction, 'horizons'>, horizon: Horizon, { t, pctPlain }: I18n = ENGLISH): string | null {
+  const range = prediction.horizons[horizon]
+  if (range === undefined) return null
+  const size = expectedMove(range.quantilesPct)
+  return Number.isFinite(size) ? t('±{size}', { size: pctPlain(size, 2) }) : null
 }
 
 /** The forecast's pairs' likely move at four hours, smallest to largest half-width of the 80% range, for the

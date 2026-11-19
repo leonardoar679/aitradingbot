@@ -26,6 +26,8 @@ import {
 } from '../src/forecast/forecastWords'
 import { NO_FILTERS, predictionRows, rowDecision } from '../src/forecast/predictionRows'
 import { emptyLiveState } from '../shared/liveMarket'
+import { expectedMove } from '../shared/forecast/size'
+import { ENGLISH } from '../shared/i18n/translate'
 
 // THE FORECAST ON SCREEN (src/forecast/, shared/forecast/{predictionChange,rangeDrivers}.ts; the V6
 // document, §3, §34-37, §70-71 and §118): the words a forecast reads in, the best prediction's card row
@@ -170,13 +172,15 @@ describe('the best prediction card (§3, §118)', () => {
     const shown = (rows: { name: string; value: string }[]): { name: string; value: string }[] => rows.map(({ name, value }) => ({ name, value }))
     // Since V7.2-R Stage 3 an hour, four hours and a day (a day's forecast this one has not: a dash); an expected price
     // only where a source of the way is in use (none here: no expected price, and no time to reach it); and the coin's
-    // own ninety days of moves (none on this forecast: a dash each).
+    // own ninety days of moves (none on this forecast: a dash each). Since V10 Stage 2 the size it expects either way in
+    // the expected price's place.
+    const expects = (forecast: PricePrediction): string => `not forecast: no way is known; the move it expects either way is ${ENGLISH.pctPlain(expectedMove(forecast.horizons.hour1!.quantilesPct), 2)}`
     expect(shown(fromClose.left)).toEqual([
       { name: 'Current', value: '$180 (last close)' },
       { name: 'Next 1 hour', value: '-1.00% ~ +2.00%' },
       { name: 'Next 4 hours', value: '-2.00% ~ +3.00%' },
       { name: 'Next 24 hours', value: '—' },
-      { name: 'Expected price', value: 'not forecast: no way is known' },
+      { name: 'Expected price', value: expects(sol) },
       { name: 'Bull case', value: '+3.00%' },
       { name: 'Bear case', value: '-2.00%' },
       { name: 'Likely high', value: '—' },
@@ -211,7 +215,8 @@ describe('the best prediction card (§3, §118)', () => {
     expect(rows.right[3]).toMatchObject({ name: 'Reached within', value: '55% within 1 hour, typically in 25 min' })
     // The base rate is no source of a way: no expected price, no time.
     const base = prediction('SOLUSDT', {}, { pUpSource: 'base', arrival: known.horizons.hour1!.arrival })
-    expect(predictionCardRows(base, forecastView(base, null, T * 1000), null).left[4].value).toBe('not forecast: no way is known')
+    expect(predictionCardRows(base, forecastView(base, null, T * 1000), null).left[4].value).toBe(expects(base))
+    expect(expects(base)).toMatch(/is \d+\.\d\d%$/)
     expect(predictionCardRows(base, forecastView(base, null, T * 1000), null).right.some((row) => row.name === 'Reached within')).toBe(false)
     // The coin's ninety days: how often its close moved 1% and 2% either way an hour, four hours and a day on, and how
     // often its path touched 1% within four hours, and when.

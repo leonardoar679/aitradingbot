@@ -5,7 +5,7 @@ import { BIG_MOVERS_LINES, BIG_MOVER_HORIZONS, bigMoversOf, type BigMoverHorizon
 import { ratesAt } from '../../shared/forecast/moveRates'
 import type { PricePrediction } from '../../shared/forecast/prediction'
 import type { CardSource, PrimaryCallState } from '../../shared/forecast/primaryCall'
-import { LINE_HORIZON_WORDS, LINE_SPAN_WORDS, pairWords } from '../calls/callText'
+import { LINE_HORIZON_WORDS, LINE_SPAN_WORDS, expectedMoveText, pairWords } from '../calls/callText'
 import { durationOf } from '../traders/traderText'
 import { msg, useI18n } from '../i18n'
 
@@ -80,6 +80,11 @@ export function BigMoversView({
                       <span>{pairWords(entry.pair)}</span>
                       <span style={{ color: 'var(--text-muted)' }}>{t(LINE_SPAN_WORDS[horizon], { share: pctPlain(entry.rate * 100, 0) })}</span>
                     </span>
+                    {((): React.JSX.Element | null => {
+                      const prediction = byPair.get(entry.pair)
+                      const expected = prediction === undefined ? null : expectedMoveText(prediction, horizon, i18n)
+                      return expected === null ? null : <span style={{ color: 'var(--text-secondary)', fontSize: '0.74rem' }}>{t('Expected move {size} within {span}', { size: expected, span })}</span>
+                    })()}
                     {touch !== undefined && touch.medianMinutes !== null && (
                       <span style={{ color: 'var(--text-secondary)', fontSize: '0.74rem' }}>
                         {t('When it moved {size} within {span}, the first touch came after {time} (median).', { size: pctPlain(sizePct, 0), span, time: durationOf(i18n, touch.medianMinutes) })}

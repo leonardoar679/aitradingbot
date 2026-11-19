@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import type { PricePrediction } from '../shared/forecast/prediction'
 import type { PrimaryCallState } from '../shared/forecast/primaryCall'
+import { expectedMove } from '../shared/forecast/size'
 
 // HOME'S BIG MOVERS AND BITCOIN TODAY (V9 Stage 1, 6 November 2026; src/forecast/BigMoversCard.tsx,
 // src/home/BitcoinTodayTile.tsx). Home lists the coins most likely to move 2% within four hours and 5% within a day, each
@@ -54,6 +55,15 @@ describe("Home's big movers", () => {
     const plain = await render(createElement(BigMoversView, { predictions: [prediction('SOLUSDT', 0.2)], onOpen: () => undefined }))
     expect(plain).not.toContain('first touch')
     expect(plain).not.toContain('Which way is unknown')
+  })
+
+  it("says each coin's expected move either way at the list's horizon, where its forecast has one (V10 Stage 2)", async () => {
+    const { BigMoversView } = await import('../src/forecast/BigMoversCard')
+    const sol = { ...prediction('SOLUSDT', 0.2), horizons: { hours4: { quantilesPct: [-3, -1.5, 0, 1.5, 3] } } } as unknown as PricePrediction
+    const html = await render(createElement(BigMoversView, { predictions: [sol, prediction('PEPEUSDT', 0.4)], onOpen: () => undefined, horizons: ['hours4', 'hours24'], times: true, calls: { cards: [] } as unknown as PrimaryCallState }))
+    expect(html).toContain(`Expected move ±${expectedMove([-3, -1.5, 0, 1.5, 3]).toFixed(2)}% within four hours`)
+    // Only where the coin's forecast has the horizon: none at a day here, none for PEPE.
+    expect(html.match(/Expected move/g)?.length).toBe(1)
   })
 })
 

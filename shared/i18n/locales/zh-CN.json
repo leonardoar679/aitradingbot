@@ -1857,7 +1857,6 @@
   "the {exchange} key is for a Classic account": "{exchange} 密钥属于经典账户",
   "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "此 {exchange} 密钥属于经典账户：可读取其余额，但真实订单需要统一交易账户。请在 Bitget 上切换账户模式，然后在“连接”页面重新测试密钥。",
   "Its likely move ({move}) is under the {line} a {horizon} trade needs: no move worth its costs is forecast now.": "其可能的波动（{move}）低于{horizon}交易所需的{line}：目前没有预测到值得承担成本的波动。",
-  "not forecast: no way is known": "未预测：方向未知",
   "Moved 1% or more, last 90 days": "近90天波动1%或以上",
   "Moved 2% or more, last 90 days": "近90天波动2%或以上",
   "Touched 1% either way, last 90 days": "近90天任一方向触及1%",
@@ -2020,7 +2019,6 @@
   "Ask the Internet Archive when it first captured each link you paste (the link is sent to {host}): an upper bound on when it was published.": "向互联网档案馆询问它首次存档你粘贴的每个链接的时间（链接会被发送到 {host}）：这是其发布时间的上限。",
   "Every coin's call": "每个币的判断",
   "No forecast yet: the lines come with the forecast's first pass.": "暂无预测：这些行会随预测的第一轮出现。",
-  "Likely move (80%)": "可能变动（80%）",
   "Moved {size}+ in its last 90 days": "近 90 天变动 {size}+",
   "Why": "原因",
   "to {time}; expected net {net}": "至 {time}；预期净收益 {net}",
@@ -2564,5 +2562,12 @@
   "The latest forecasts checked:": "最近检验的预测：",
   "The found traders' consensus": "所找到交易员的共识",
   "The forecast at {horizon}: real moves {ratio} the size it expected, {in80} inside its 80% range": "{horizon}的预测：实际变动为预期幅度的 {ratio}，{in80} 落在 80% 区间内",
-  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}：上涨时 {rising} 正确、下跌时 {falling} 正确，已评分 {scored}"
+  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}：上涨时 {rising} 正确、下跌时 {falling} 正确，已评分 {scored}",
+  "±{size}": "±{size}",
+  "Expected move, either way": "预期变动（任一方向）",
+  "{size}; 80% range {range}": "{size}；80% 区间 {range}",
+  "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "预期变动是预测在任一方向上预期的变动幅度；在 11 月 9 日至 16 日的七天运行中，实际变动为其 0.91 至 1.06 倍。",
+  "Expected move {size} within {span}": "{span}内预期变动 {size}",
+  "not forecast: no way is known; the move it expects either way is {size}": "无预测：方向未知；任一方向的预期变动为 {size}",
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "它预期{horizon}内任一方向变动 ±{size}：幅度已测量，方向未测量。"
 }

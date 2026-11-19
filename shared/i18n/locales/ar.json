@@ -1857,7 +1857,6 @@
   "the {exchange} key is for a Classic account": "مفتاح {exchange} يخص حسابًا كلاسيكيًا",
   "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "مفتاح {exchange} هذا يخص حسابًا كلاسيكيًا: يُقرأ رصيده، لكن الأمر الحقيقي يحتاج إلى حساب التداول الموحّد. بدّل الحساب على Bitget، ثم اختبر المفتاح مجددًا في صفحة الاتصالات.",
   "Its likely move ({move}) is under the {line} a {horizon} trade needs: no move worth its costs is forecast now.": "الحركة المرجحة ({move}) أقل من {line} التي تحتاجها صفقة {horizon}: لا توجد توقعات الآن بحركة تستحق تكاليفها.",
-  "not forecast: no way is known": "لا توقع: الاتجاه غير معروف",
   "Moved 1% or more, last 90 days": "تحرك 1% أو أكثر، آخر 90 يومًا",
   "Moved 2% or more, last 90 days": "تحرك 2% أو أكثر، آخر 90 يومًا",
   "Touched 1% either way, last 90 days": "لمس 1% في أي اتجاه، آخر 90 يومًا",
@@ -2020,7 +2019,6 @@
   "Ask the Internet Archive when it first captured each link you paste (the link is sent to {host}): an upper bound on when it was published.": "اسأل أرشيف الإنترنت متى التقط لأول مرة كل رابط تلصقه (يُرسَل الرابط إلى {host}): حدٌّ أعلى لوقت نشره.",
   "Every coin's call": "توصية كل عملة",
   "No forecast yet: the lines come with the forecast's first pass.": "لا توقع بعد: تأتي الأسطر مع الجولة الأولى للتوقع.",
-  "Likely move (80%)": "الحركة المرجّحة (80%)",
   "Moved {size}+ in its last 90 days": "تحرك {size}+ في آخر 90 يومًا",
   "Why": "السبب",
   "to {time}; expected net {net}": "حتى {time}؛ الصافي المتوقع {net}",
@@ -2564,5 +2562,12 @@
   "The latest forecasts checked:": "أحدث التوقعات المفحوصة:",
   "The found traders' consensus": "إجماع المتداولين الذين عُثر عليهم",
   "The forecast at {horizon}: real moves {ratio} the size it expected, {in80} inside its 80% range": "التوقع على مدى {horizon}: الحركات الفعلية {ratio} الحجم الذي توقعه، {in80} داخل نطاقه 80%",
-  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: صحيح في {rising} من الصعود و{falling} من الهبوط، {scored} مُقيَّم"
+  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: صحيح في {rising} من الصعود و{falling} من الهبوط، {scored} مُقيَّم",
+  "±{size}": "±{size}",
+  "Expected move, either way": "الحركة المتوقعة، في أي اتجاه",
+  "{size}; 80% range {range}": "{size}؛ نطاق 80% {range}",
+  "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "الحركة المتوقعة هي الحجم الذي يتوقعه التوقع في أي اتجاه؛ في تشغيل الأيام السبعة من 9 إلى 16 نوفمبر بلغت الحركات الفعلية من 0.91 إلى 1.06 ضعفه.",
+  "Expected move {size} within {span}": "الحركة المتوقعة {size} خلال {span}",
+  "not forecast: no way is known; the move it expects either way is {size}": "لا توقع: لا اتجاه معروف؛ الحركة التي يتوقعها في أي اتجاه {size}",
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "يتوقع حركة بمقدار ±{size} في أي اتجاه خلال {horizon}: الحجم مقيس، والاتجاه ليس كذلك."
 }

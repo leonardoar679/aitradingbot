@@ -1857,7 +1857,6 @@
   "the {exchange} key is for a Classic account": "คีย์ {exchange} เป็นของบัญชีคลาสสิก",
   "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "คีย์ {exchange} นี้เป็นของบัญชีคลาสสิก: อ่านยอดคงเหลือได้ แต่คำสั่งซื้อขายจริงต้องใช้บัญชีเทรดแบบรวม โปรดเปลี่ยนบัญชีบน Bitget แล้วทดสอบคีย์อีกครั้งในหน้าการเชื่อมต่อ",
   "Its likely move ({move}) is under the {line} a {horizon} trade needs: no move worth its costs is forecast now.": "การเคลื่อนไหวที่น่าจะเกิด ({move}) ต่ำกว่า {line} ที่การเทรด{horizon}ต้องการ: ตอนนี้ไม่มีการคาดการณ์การเคลื่อนไหวที่คุ้มค่ากับต้นทุน",
-  "not forecast: no way is known": "ไม่มีการคาดการณ์: ไม่ทราบทิศทาง",
   "Moved 1% or more, last 90 days": "เคลื่อนไหว 1% ขึ้นไป ใน 90 วันที่ผ่านมา",
   "Moved 2% or more, last 90 days": "เคลื่อนไหว 2% ขึ้นไป ใน 90 วันที่ผ่านมา",
   "Touched 1% either way, last 90 days": "แตะ 1% ทิศทางใดก็ได้ ใน 90 วันที่ผ่านมา",
@@ -2020,7 +2019,6 @@
   "Ask the Internet Archive when it first captured each link you paste (the link is sent to {host}): an upper bound on when it was published.": "ถามอินเทอร์เน็ตอาร์ไคฟ์ว่าบันทึกลิงก์ที่คุณวางแต่ละลิงก์ไว้ครั้งแรกเมื่อใด (ลิงก์จะถูกส่งไปยัง {host}): เป็นขอบเขตบนของเวลาที่เผยแพร่",
   "Every coin's call": "คำแนะนำของทุกเหรียญ",
   "No forecast yet: the lines come with the forecast's first pass.": "ยังไม่มีการคาดการณ์: แถวต่างๆ จะมาพร้อมรอบแรกของการคาดการณ์",
-  "Likely move (80%)": "การเคลื่อนไหวที่น่าจะเกิด (80%)",
   "Moved {size}+ in its last 90 days": "เคลื่อนไหว {size} ขึ้นไป ใน 90 วันที่ผ่านมา",
   "Why": "เหตุผล",
   "to {time}; expected net {net}": "ถึง {time} ผลสุทธิที่คาดหวัง {net}",
@@ -2564,5 +2562,12 @@
   "The latest forecasts checked:": "การคาดการณ์ล่าสุดที่ตรวจแล้ว:",
   "The found traders' consensus": "ความเห็นตรงกันของเทรดเดอร์ที่พบ",
   "The forecast at {horizon}: real moves {ratio} the size it expected, {in80} inside its 80% range": "การคาดการณ์ที่ {horizon}: การเคลื่อนไหวจริงเป็น {ratio} ของขนาดที่คาดไว้ {in80} อยู่ในช่วง 80%",
-  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: ถูก {rising} ของขาขึ้นและ {falling} ของขาลง ตรวจแล้ว {scored}"
+  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: ถูก {rising} ของขาขึ้นและ {falling} ของขาลง ตรวจแล้ว {scored}",
+  "±{size}": "±{size}",
+  "Expected move, either way": "การเคลื่อนไหวที่คาดไว้ ไม่ว่าทางใด",
+  "{size}; 80% range {range}": "{size} ช่วง 80% {range}",
+  "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "การเคลื่อนไหวที่คาดไว้คือขนาดที่การคาดการณ์คาดไว้ไม่ว่าทางใด ในการทดสอบเจ็ดวันระหว่าง 9 ถึง 16 พฤศจิกายน การเคลื่อนไหวจริงอยู่ที่ 0.91 ถึง 1.06 เท่าของมัน",
+  "Expected move {size} within {span}": "การเคลื่อนไหวที่คาดไว้ {size} ภายใน {span}",
+  "not forecast: no way is known; the move it expects either way is {size}": "ไม่มีการคาดการณ์: ไม่ทราบทิศทาง การเคลื่อนไหวที่คาดไว้ไม่ว่าทางใดคือ {size}",
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "คาดว่าจะเคลื่อนไหว ±{size} ไม่ว่าทางใดภายใน {horizon} ขนาดวัดได้แล้ว ส่วนทิศทางยังไม่ได้วัด"
 }

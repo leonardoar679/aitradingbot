@@ -17,6 +17,7 @@ import { ForecastHistoryChart } from './ForecastHistoryChart'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import { tradeThisOf } from './tradeThis'
 import { useRiskTarget } from './useRiskTarget'
+import { expectedMove } from '../../shared/forecast/size'
 import { callColor, callLabel, decisionWords, dollarText, leadHorizon, likelyLevels, marketStateWord, momentumWord, pairText, rangeText, signedPct, timeLeftText, volumeWord, wayKnown, HORIZON_NEXT, HORIZON_SHORT, reliabilityWord } from './forecastWords'
 import type { MoveRates } from '../../shared/forecast/moveRates'
 import { VENUE_STAKE_QUOTE, type RoundTrip } from '../../shared/venueCosts'
@@ -432,7 +433,8 @@ export function PredictionDrawer({
                 highPct: pct(likely.highPct),
                 low: dollarText(likely.low, i18n),
                 lowPct: pct(likely.lowPct)
-              })}
+              })}{' '}
+              {t('It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.', { size: pctPlain(expectedMove(leadRange.quantilesPct), 2), horizon: horizonShort })}
             </p>
           )}
           {likely !== null && wayKnown(leadRange) && (

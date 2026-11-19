@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { CallLines } from '../src/calls/CallLines'
 import { PrimaryCallCard } from '../src/calls/PrimaryCallCard'
-import { cardLabel, liveCheckText, noCardText, pairWords, refusalText, sizeSpanText, sourcesText, utcText } from '../src/calls/callText'
+import { cardLabel, expectedMoveText, liveCheckText, noCardText, pairWords, refusalText, sizeSpanText, sourcesText, utcText } from '../src/calls/callText'
+import { expectedMove } from '../shared/forecast/size'
 import { DELISTING_STUDY } from '../shared/delistingStudy'
 import { PRIMARY_CALL_VERSION, delistingCardOf, type PrimaryCallState, type PrimaryCard, type RefusalCode } from '../shared/forecast/primaryCall'
 import type { PricePrediction } from '../shared/forecast/prediction'
@@ -107,5 +108,14 @@ describe("every coin's line", () => {
     expect(html).toContain('40% of four-hour spans')
     expect(html).toContain('No measured source calls its way.')
     expect(html).toContain('none')
+    // Since V10 Stage 2 each coin's expected move either way, the size it is measured to know, beside its 80% range.
+    expect(html).toContain('Expected move, either way')
+    expect(html).toContain(`${expectedMoveText(forecast('PEPEUSDT', 3.4, 0.4), 'hours4')}; 80% range -3.40% to +3.40%`)
+    expect(html).toContain('the real moves came to 0.91 to 1.06 times it')
+  })
+
+  it("reads a coin's expected move off its five levels: a forecast of ±3.4% at P10 and P90 expects about ±1.5%", () => {
+    expect(expectedMoveText(forecast('PEPEUSDT', 3.4, 0.4), 'hours4')).toBe(`±${(expectedMove([-3.4, -1.7, 0, 1.7, 3.4])).toFixed(2)}%`)
+    expect(expectedMoveText(forecast('PEPEUSDT', 3.4, 0.4), 'hours24')).toBeNull()
   })
 })

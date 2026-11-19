@@ -1857,7 +1857,6 @@
   "the {exchange} key is for a Classic account": "{exchange} 키가 클래식 계정용임",
   "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "이 {exchange} 키는 클래식 계정용입니다. 잔고는 읽을 수 있지만 실거래 주문에는 통합 거래 계정이 필요합니다. Bitget에서 계정을 전환한 뒤 연결 페이지에서 키를 다시 테스트하세요.",
   "Its likely move ({move}) is under the {line} a {horizon} trade needs: no move worth its costs is forecast now.": "예상 변동폭({move})이 {horizon} 거래에 필요한 {line}보다 작습니다. 지금은 비용을 감당할 만한 변동이 예측되지 않습니다.",
-  "not forecast: no way is known": "예측 없음: 방향을 알 수 없음",
   "Moved 1% or more, last 90 days": "최근 90일 1% 이상 변동",
   "Moved 2% or more, last 90 days": "최근 90일 2% 이상 변동",
   "Touched 1% either way, last 90 days": "최근 90일 어느 방향이든 1% 도달",
@@ -2020,7 +2019,6 @@
   "Ask the Internet Archive when it first captured each link you paste (the link is sent to {host}): an upper bound on when it was published.": "붙여 넣은 각 링크를 언제 처음 캡처했는지 인터넷 아카이브에 묻기 (링크가 {host}에 전송됨): 게시 시각의 상한이 됩니다.",
   "Every coin's call": "코인별 판단",
   "No forecast yet: the lines come with the forecast's first pass.": "아직 예측이 없습니다. 예측의 첫 회차와 함께 행이 나타납니다.",
-  "Likely move (80%)": "예상 변동폭 (80%)",
   "Moved {size}+ in its last 90 days": "최근 90일 {size} 이상 변동",
   "Why": "이유",
   "to {time}; expected net {net}": "{time}까지; 예상 순손익 {net}",
@@ -2564,5 +2562,12 @@
   "The latest forecasts checked:": "최근 검증된 예측:",
   "The found traders' consensus": "찾은 트레이더들의 합의",
   "The forecast at {horizon}: real moves {ratio} the size it expected, {in80} inside its 80% range": "{horizon} 예측: 실제 변동은 예상 크기의 {ratio}, {in80}가 80% 범위 안",
-  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: 상승 시 {rising}, 하락 시 {falling} 적중, {scored}건 채점"
+  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: 상승 시 {rising}, 하락 시 {falling} 적중, {scored}건 채점",
+  "±{size}": "±{size}",
+  "Expected move, either way": "예상 변동폭(방향 무관)",
+  "{size}; 80% range {range}": "{size}; 80% 범위 {range}",
+  "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "예상 변동폭은 예측이 어느 방향으로든 예상하는 변동의 크기입니다. 11월 9일부터 16일까지의 7일 실행에서 실제 변동은 그 0.91~1.06배였습니다.",
+  "Expected move {size} within {span}": "{span} 안 예상 변동폭 {size}",
+  "not forecast: no way is known; the move it expects either way is {size}": "예측 없음: 방향을 알 수 없음. 어느 방향으로든 예상하는 변동폭은 {size}",
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "{horizon} 안에 어느 방향으로든 ±{size}의 변동을 예상합니다. 크기는 측정되었고 방향은 측정되지 않았습니다."
 }

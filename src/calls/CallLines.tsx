@@ -5,7 +5,7 @@ import { useI18n } from '../i18n'
 import { msg } from '../../shared/i18n/translate'
 import type { PrimaryCallState, PrimaryCard, RefusalCode } from '../../shared/forecast/primaryCall'
 import type { PricePrediction } from '../../shared/forecast/prediction'
-import { LINE_HORIZON_WORDS, LINE_SIZE_PCT, LINE_SPAN_WORDS, cardLabel, likelyText, pairWords, rateOf, refusalText, sourceWords, utcText, type LineHorizon } from './callText'
+import { LINE_HORIZON_WORDS, LINE_SIZE_PCT, LINE_SPAN_WORDS, cardLabel, expectedMoveText, likelyText, pairWords, rateOf, refusalText, sourceWords, utcText, type LineHorizon } from './callText'
 
 const HORIZON_CHOICES: readonly { horizon: LineHorizon; label: string }[] = [
   { horizon: 'hour1', label: msg('1 hour') },
@@ -76,7 +76,7 @@ export function CallLines({
               <tr>
                 <th style={headCellStyle}>{t('Coin')}</th>
                 <th style={headCellStyle}>{t('Call')}</th>
-                <th style={headCellStyle}>{t('Likely move (80%)')}</th>
+                <th style={headCellStyle}>{t('Expected move, either way')}</th>
                 <th style={headCellStyle}>{t('Moved {size}+ in its last 90 days', { size })}</th>
                 <th style={headCellStyle}>{t('Why')}</th>
               </tr>
@@ -95,7 +95,11 @@ export function CallLines({
                       ? t('to {time}; expected net {net}', { time: utcText(line.card.exitAt, i18n), net: pct(line.card.expectedNet.pct, 2) })
                       : line.prediction === null
                         ? '—'
-                        : (likelyText(line.prediction, horizon, i18n) ?? '—')}
+                        : ((): string => {
+                            const size = expectedMoveText(line.prediction, horizon, i18n)
+                            const range = likelyText(line.prediction, horizon, i18n)
+                            return size === null || range === null ? (range ?? '—') : t('{size}; 80% range {range}', { size, range })
+                          })()}
                   </td>
                   <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>{line.rate === null ? '—' : t(LINE_SPAN_WORDS[horizon], { share: pctPlain(Math.round(line.rate * 100), 0) })}</td>
                   <td style={{ ...cellStyle, whiteSpace: 'normal', minWidth: '14rem', color: 'var(--text-secondary)' }}>
@@ -111,7 +115,8 @@ export function CallLines({
         {t(
           "The cards first; then each coin by how often its own close moved at least {size} either way over {span} in its last 90 days — a frequency of the past, not a forecast. The likely move is the forecast's 80% range at the last close. A line opens the coin's whole forecast, with its own lean, P(up) and edge. Nothing here places anything.",
           { size, span: t(LINE_HORIZON_WORDS[horizon]) }
-        )}
+        )}{' '}
+        {t('The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.')}
       </p>
     </Card>
   )

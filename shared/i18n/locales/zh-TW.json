@@ -1857,7 +1857,6 @@
   "the {exchange} key is for a Classic account": "{exchange} 金鑰屬於經典帳戶",
   "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "此 {exchange} 金鑰屬於經典帳戶：可讀取其餘額，但真實訂單需要統一交易帳戶。請在 Bitget 上切換帳戶模式，然後在「連線」頁面重新測試金鑰。",
   "Its likely move ({move}) is under the {line} a {horizon} trade needs: no move worth its costs is forecast now.": "其可能的波動（{move}）低於{horizon}交易所需的{line}：目前沒有預測到值得承擔成本的波動。",
-  "not forecast: no way is known": "未預測：方向未知",
   "Moved 1% or more, last 90 days": "近90天波動1%或以上",
   "Moved 2% or more, last 90 days": "近90天波動2%或以上",
   "Touched 1% either way, last 90 days": "近90天任一方向觸及1%",
@@ -2020,7 +2019,6 @@
   "Ask the Internet Archive when it first captured each link you paste (the link is sent to {host}): an upper bound on when it was published.": "向網際網路檔案館查詢你貼上的每個連結首次被擷取的時間（連結會傳送至 {host}）：可作為其發布時間的上限。",
   "Every coin's call": "每個幣的判斷",
   "No forecast yet: the lines come with the forecast's first pass.": "尚無預測：各列會在預測完成第一輪後出現。",
-  "Likely move (80%)": "可能波動（80%）",
   "Moved {size}+ in its last 90 days": "近90天波動 {size} 以上",
   "Why": "原因",
   "to {time}; expected net {net}": "至 {time}；預期淨報酬 {net}",
@@ -2564,5 +2562,12 @@
   "The latest forecasts checked:": "最近檢驗的預測：",
   "The found traders' consensus": "所找到交易員的共識",
   "The forecast at {horizon}: real moves {ratio} the size it expected, {in80} inside its 80% range": "{horizon}的預測：實際變動為預期幅度的 {ratio}，{in80} 落在 80% 區間內",
-  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}：上漲時 {rising} 正確、下跌時 {falling} 正確，已評分 {scored}"
+  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}：上漲時 {rising} 正確、下跌時 {falling} 正確，已評分 {scored}",
+  "±{size}": "±{size}",
+  "Expected move, either way": "預期變動（任一方向）",
+  "{size}; 80% range {range}": "{size}；80% 區間 {range}",
+  "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "預期變動是預測在任一方向上預期的變動幅度；在 11 月 9 日至 16 日的七天運行中，實際變動為其 0.91 至 1.06 倍。",
+  "Expected move {size} within {span}": "{span}內預期變動 {size}",
+  "not forecast: no way is known; the move it expects either way is {size}": "無預測：方向未知；任一方向的預期變動為 {size}",
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "它預期{horizon}內任一方向變動 ±{size}：幅度已測量，方向未測量。"
 }

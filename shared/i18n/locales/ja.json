@@ -1857,7 +1857,6 @@
   "the {exchange} key is for a Classic account": "{exchange} キーがクラシックアカウント用",
   "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "この {exchange} キーはクラシックアカウントのものです。残高は読み取れますが、リアル注文には統合取引アカウントが必要です。Bitget でアカウントを切り替えてから、「接続」ページでキーを再テストしてください。",
   "Its likely move ({move}) is under the {line} a {horizon} trade needs: no move worth its costs is forecast now.": "見込みの値動き（{move}）は、{horizon}の取引に必要な{line}を下回っています。コストに見合う値動きは、今は予測されていません。",
-  "not forecast: no way is known": "予測なし：方向は不明",
   "Moved 1% or more, last 90 days": "直近90日で1%以上動いた割合",
   "Moved 2% or more, last 90 days": "直近90日で2%以上動いた割合",
   "Touched 1% either way, last 90 days": "直近90日でどちらかに1%到達",
@@ -2020,7 +2019,6 @@
   "Ask the Internet Archive when it first captured each link you paste (the link is sent to {host}): an upper bound on when it was published.": "貼り付けた各リンクについて、インターネット・アーカイブが最初に保存した日時を照会する（リンクは {host} に送信されます）：公開日時の上限が分かります。",
   "Every coin's call": "各コインの判断",
   "No forecast yet: the lines come with the forecast's first pass.": "予測はまだありません：各行は予測の最初の一巡とともに表示されます。",
-  "Likely move (80%)": "見込みの値動き（80%）",
   "Moved {size}+ in its last 90 days": "直近90日に {size} 以上動いた割合",
   "Why": "理由",
   "to {time}; expected net {net}": "{time} まで、予想純損益 {net}",
@@ -2564,5 +2562,12 @@
   "The latest forecasts checked:": "直近に検証された予測：",
   "The found traders' consensus": "見つかったトレーダーの合意",
   "The forecast at {horizon}: real moves {ratio} the size it expected, {in80} inside its 80% range": "{horizon}の予測：実際の変動は予想幅の{ratio}、{in80}が80%レンジ内",
-  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}：上昇時 {rising}、下落時 {falling} が的中、{scored} 件を採点"
+  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}：上昇時 {rising}、下落時 {falling} が的中、{scored} 件を採点",
+  "±{size}": "±{size}",
+  "Expected move, either way": "予想変動幅（方向問わず）",
+  "{size}; 80% range {range}": "{size}、80%レンジ {range}",
+  "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "予想変動幅は、予測がどちらの方向にも見込む変動の大きさです。11月9日から16日の7日間の運用では、実際の変動はその0.91～1.06倍でした。",
+  "Expected move {size} within {span}": "{span}以内の予想変動幅 {size}",
+  "not forecast: no way is known; the move it expects either way is {size}": "予測なし：方向は不明。どちらの方向にも見込む変動幅は {size}",
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "{horizon}以内にどちらの方向にも ±{size} の変動を見込んでいます。大きさは測定済みで、方向は測定されていません。"
 }

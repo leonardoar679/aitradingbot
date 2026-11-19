@@ -1857,7 +1857,6 @@
   "the {exchange} key is for a Classic account": "kunci {exchange} milik akun Klasik",
   "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "Kunci {exchange} ini milik akun Klasik: saldonya dibaca, tetapi order nyata memerlukan Akun Trading Terpadu. Alihkan akun di Bitget, lalu uji kunci lagi di halaman Koneksi.",
   "Its likely move ({move}) is under the {line} a {horizon} trade needs: no move worth its costs is forecast now.": "Pergerakan yang mungkin ({move}) di bawah {line} yang dibutuhkan transaksi {horizon}: saat ini tidak ada prakiraan pergerakan yang sepadan dengan biayanya.",
-  "not forecast: no way is known": "tidak ada prakiraan: arah tidak diketahui",
   "Moved 1% or more, last 90 days": "Bergerak 1% atau lebih, 90 hari terakhir",
   "Moved 2% or more, last 90 days": "Bergerak 2% atau lebih, 90 hari terakhir",
   "Touched 1% either way, last 90 days": "Menyentuh 1% ke arah mana pun, 90 hari terakhir",
@@ -2020,7 +2019,6 @@
   "Ask the Internet Archive when it first captured each link you paste (the link is sent to {host}): an upper bound on when it was published.": "Tanyakan ke Internet Archive kapan pertama kali ia merekam setiap tautan yang Anda tempel (tautan dikirim ke {host}): batas atas waktu terbitnya.",
   "Every coin's call": "Saran untuk setiap koin",
   "No forecast yet: the lines come with the forecast's first pass.": "Belum ada prakiraan: baris-baris ini muncul bersama putaran pertama prakiraan.",
-  "Likely move (80%)": "Gerak yang mungkin (80%)",
   "Moved {size}+ in its last 90 days": "Bergerak {size}+ dalam 90 hari terakhirnya",
   "Why": "Alasan",
   "to {time}; expected net {net}": "hingga {time}; hasil bersih yang diharapkan {net}",
@@ -2564,5 +2562,12 @@
   "The latest forecasts checked:": "Prakiraan terbaru yang diperiksa:",
   "The found traders' consensus": "Konsensus trader yang ditemukan",
   "The forecast at {horizon}: real moves {ratio} the size it expected, {in80} inside its 80% range": "Prakiraan pada {horizon}: gerak nyata {ratio} ukuran yang diperkirakan, {in80} di dalam rentang 80%-nya",
-  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: benar pada {rising} kenaikan dan {falling} penurunan, {scored} dinilai"
+  "{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored": "{source}: benar pada {rising} kenaikan dan {falling} penurunan, {scored} dinilai",
+  "±{size}": "±{size}",
+  "Expected move, either way": "Gerak yang diperkirakan, ke arah mana pun",
+  "{size}; 80% range {range}": "{size}; rentang 80% {range}",
+  "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "Gerak yang diperkirakan adalah ukuran yang diharapkan prakiraan ke arah mana pun; pada uji tujuh hari 9 sampai 16 November gerak nyata mencapai 0,91 hingga 1,06 kalinya.",
+  "Expected move {size} within {span}": "Gerak yang diperkirakan {size} dalam {span}",
+  "not forecast: no way is known; the move it expects either way is {size}": "tidak ada prakiraan: arah tidak diketahui; gerak yang diharapkan ke arah mana pun {size}",
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "Ia memperkirakan gerak ±{size} ke arah mana pun dalam {horizon}: ukurannya terukur, arahnya tidak."
 }
