@@ -54,8 +54,12 @@ const SEED = 20261013
 const LONG_FOLDS = { folds: Number(process.env.FOLDS ?? 8), foldDays: 28, minTrainDays: 90 }
 const ROLLING_DAYS = 90
 const WARMUP_DAYS = 26
-const MODES = ['expanding', 'rolling'] as const
-type Mode = (typeof MODES)[number]
+type Mode = 'expanding' | 'rolling'
+/** ROLLING_ONLY=1 fits the rolling mode alone -- the live fit's window, V10-LEAN's held-out records (19 November 2026) --
+ * keeps its promotions beside its records (long-rolling/promotions.json), and leaves out the comparison with the
+ * expanding mode and the cadence, which need both. */
+const ROLLING_ONLY = process.env.ROLLING_ONLY === '1'
+const MODES: readonly Mode[] = ROLLING_ONLY ? ['rolling'] : ['expanding', 'rolling']
 
 const clock = (sec: number): string => new Date(sec * 1000).toISOString().slice(0, 16).replace('T', ' ')
 const started = Date.now()
@@ -211,6 +215,12 @@ for (const horizon of ONLY) {
 
 // Each mode's calibration from its record, and its shown forecast scored out of sample as the calibration scores it.
 const promotions: Record<Mode, Promotion[]> = { expanding: promotionsOf(scores.expanding), rolling: promotionsOf(scores.rolling) }
+for (const mode of MODES) writeFileSync(join(OUT, `long-${mode}`, 'promotions.json'), JSON.stringify({ runId: `long-${mode}`, promotions: promotions[mode] }, null, 1))
+if (ROLLING_ONLY) {
+  writeFileSync(join(OUT, RESULT), JSON.stringify({ folds: plan, rollingDays: ROLLING_DAYS, rollingOnly: true, fitMinutes }, null, 1))
+  console.log(`the rolling mode's records and promotions are in ${join(OUT, 'long-rolling')} (${elapsed()})`)
+  process.exit(0)
+}
 const calibrations: Record<Mode, RunCalibration> = { expanding: buildRunCalibration(records.expanding, promotions.expanding, 'long-expanding'), rolling: buildRunCalibration(records.rolling, promotions.rolling, 'long-rolling') }
 const shown = (mode: Mode, horizon: Horizon): ScoredRow[] => {
   const record = records[mode].get(horizon)!

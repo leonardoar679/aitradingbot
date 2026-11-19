@@ -205,7 +205,9 @@ for (const horizon of ONLY) {
     const record = decodeOos(new Uint8Array(readFileSync(file)))
     if (record === null) throw new Error(`${file} is no record this build reads`)
     const runId = basename(dir)
-    const promotions = promotionsByRun.get(runId)
+    // The long walk forward keeps its promotions beside its records (ROLLING_ONLY); a run of the app, in its training lines.
+    const beside = join(dir, 'promotions.json')
+    const promotions = existsSync(beside) ? (JSON.parse(readFileSync(beside, 'utf-8')) as { promotions: { horizon: Horizon; model: ForecastModelId; promoted: boolean }[] }).promotions : promotionsByRun.get(runId)
     if (promotions === undefined) throw new Error(`no training line names ${runId}'s promotions`)
     const promoted = new Set(promotions.filter((entry) => entry.horizon === horizon && entry.promoted).map((entry) => entry.model))
     const scored = scoreRecord(rowsOf(record), horizon, promoted)
