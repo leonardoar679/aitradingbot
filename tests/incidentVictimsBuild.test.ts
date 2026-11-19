@@ -69,7 +69,8 @@ describe("a hack's victims, by name", () => {
   })
 
   it("writes the committed table's own text, and reads back only a table of its version with whole rows", () => {
-    const text = readFileSync(join(__dirname, '..', 'shared', 'incidentVictims.json'), 'utf-8')
+    // Git may check the table out with CRLF (core.autocrlf), which the main checkout does; the builder writes LF.
+    const text = readFileSync(join(__dirname, '..', 'shared', 'incidentVictims.json'), 'utf-8').replace(/\r\n/g, '\n')
     const file = readVictimsFile(JSON.parse(text))
     expect(file?.victims.length).toBeGreaterThanOrEqual(INCIDENT_VICTIMS_LINES.minNames)
     expect(victimsFileText(file as NonNullable<typeof file>)).toBe(text)
