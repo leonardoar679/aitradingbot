@@ -31,6 +31,9 @@ const FROM = process.env.FROM || '2025-10'
 const TO = process.env.TO || '2026-09'
 const TOP = Number(process.env.TOP || 40)
 const STEP = process.env.STEP || 'all'
+/** KEEP_DAILY=1 keeps each pair's daily klines the ranking reads, as bar lines in <OUT>/daily/<PAIR>-YYYY-MM.jsonl: every
+ * USDT pair of every month, delisted ones included, for the daily direction studies (V10 Stage 5, 19 November 2026). */
+const KEEP_DAILY = process.env.KEEP_DAILY === '1'
 const WORKERS = 6
 /** Bitcoin and ether are in every month: the market's figures are read from them. */
 const ALWAYS = ['BTCUSDT', 'ETHUSDT']
@@ -216,6 +219,10 @@ if ((STEP === 'universe' || STEP === 'all') && universe === null) {
             return
           }
           const rows = barLinesOf(read.text)
+          if (KEEP_DAILY) {
+            mkdirSync(join(OUT, 'daily'), { recursive: true })
+            writeFileSync(join(OUT, 'daily', `${pair}-${month}.jsonl`), rows.map((row) => JSON.stringify(row)).join('\n') + '\n')
+          }
           const quoteVolume = rows.reduce((sum, row) => sum + row[6], 0)
           manifest.files[key] = { status: read.status, sha256: read.sha256, rows: rows.length, quoteVolume }
           ;(volumeOf[month] ??= {})[pair] = quoteVolume
