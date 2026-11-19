@@ -8,7 +8,7 @@ import { registerIpcHandlers } from './ipc'
 import { startResearchFolder } from './services/researchFolderService'
 import { startVenueQuotes } from './services/venueQuotesService'
 import { startPredictionLedger } from './services/predictionLedgerService'
-import { startAccuracyBoard } from './services/accuracyBoardService'
+import { flushAccuracyBoardSync, startAccuracyBoard } from './services/accuracyBoardService'
 import { startDailyForecast } from './services/dailyForecastService'
 import { startAiDaily } from './services/aiDailyService'
 import { startBookMarks } from './services/booksService'
@@ -225,6 +225,8 @@ if (!gotSingleInstanceLock) {
     void startPredictionLedger().catch((error) => console.error('The prediction record could not start:', error))
     // The accuracy board (V10 Stage 2; accuracyBoardService.ts): what it kept read back, or the days before read once.
     void startAccuracyBoard().catch((error) => console.error('The accuracy board could not start:', error))
+    // Written at once as the app quits: the minute's counts are not lost (V10 Stage 8).
+    app.on('will-quit', flushAccuracyBoardSync)
     // The daily forecast (V10 Stage 4; dailyForecastService.ts): sizes over one, three and seven days, made a little after
     // each UTC day opens from Binance's public daily bars. Calls no way, places nothing.
     startDailyForecast()
