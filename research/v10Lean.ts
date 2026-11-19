@@ -211,7 +211,7 @@ for (const horizon of ONLY) {
     if (promotions === undefined) throw new Error(`no training line names ${runId}'s promotions`)
     const promoted = new Set(promotions.filter((entry) => entry.horizon === horizon && entry.promoted).map((entry) => entry.model))
     const scored = scoreRecord(rowsOf(record), horizon, promoted)
-    entries.push(...scored)
+    for (const entry of scored) entries.push(entry)
     bySet[runId] = { rows: scored.length, pooled: (summary(scored, 'month') as { pooled: unknown }).pooled }
     console.log(`${horizon} ${runId}: ${scored.length} rows (${((Date.now() - started) / 60_000).toFixed(1)} min)`)
   }

@@ -100,8 +100,9 @@ const round = (value: number): number => Math.round(value * 1e4) / 1e4
 
 function figuresOf(scored: readonly { week: number; vector: Vector }[], blockWeeks: number): Record<string, unknown> {
   if (scored.length === 0) return { calls: 0 }
-  const first = Math.min(...scored.map((entry) => entry.week))
-  const last = Math.max(...scored.map((entry) => entry.week))
+  // Folded, not spread: a spread of a hundred thousand calls overflows the stack.
+  const first = scored.reduce((least, entry) => Math.min(least, entry.week), Infinity)
+  const last = scored.reduce((most, entry) => Math.max(most, entry.week), -Infinity)
   const weeks = Array.from({ length: last - first + 1 }, () => new Float64Array(WIDTH))
   const total = new Float64Array(WIDTH)
   for (const entry of scored) {

@@ -166,8 +166,9 @@ function rngOf(seed) {
  * bootstrap of the calendar weeks (every week from the first to the last, an empty one adding nothing). */
 function figuresOf(calls, blockWeeks) {
   if (calls.length === 0) return { calls: 0 }
-  const first = Math.min(...calls.map((call) => call.week))
-  const last = Math.max(...calls.map((call) => call.week))
+  // Folded, not spread: a spread of a hundred thousand calls overflows the stack.
+  const first = calls.reduce((least, call) => Math.min(least, call.week), Infinity)
+  const last = calls.reduce((most, call) => Math.max(most, call.week), -Infinity)
   const weeks = Array.from({ length: last - first + 1 }, () => new Float64Array(WIDTH))
   const total = new Float64Array(WIDTH)
   for (const call of calls) {
