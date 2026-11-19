@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../components/Card'
 import { buttonStyle, cellStyle, headCellStyle, noteStyle } from '../agents/agentStyles'
-import type { AccuracyBoard, BoardEntry, BoardFigure, BoardHorizon } from '../../shared/evaluation/accuracyBoard'
+import type { AccuracyBoard, BoardEntry, BoardFigure, BoardHorizon, BoardHorizonKey } from '../../shared/evaluation/accuracyBoard'
 import { HORIZON_NAME } from '../../shared/forecast/words'
-import type { Horizon } from '../../shared/forecast/features'
-import { useI18n, type I18n } from '../i18n'
+import { msg, useI18n, type I18n } from '../i18n'
 import { utcWhen } from '../traders/traderText'
 
 // HOW THE FORECAST DID (V10 Stage 2, 19 November 2026; shared/evaluation/accuracyBoard.ts). The price forecast checked
@@ -14,7 +13,9 @@ import { utcWhen } from '../traders/traderText'
 // over the last day, with the latest forecasts checked one by one. It reads the record; it records and places nothing.
 
 /** The forecasts listed one by one: the ones whose sizes matter most to a person. */
-const LISTED: readonly Horizon[] = ['hours4', 'hours24']
+const LISTED: readonly BoardHorizonKey[] = ['hours4', 'hours24', 'days3', 'days7']
+/** Every horizon the board reads by name: the five-minute forecast's, and the daily forecast's (V10 Stage 4). */
+export const BOARD_HORIZON_NAME: Readonly<Record<BoardHorizonKey, string>> = { ...HORIZON_NAME, day1: msg('1 day'), days3: msg('3 days'), days7: msg('7 days') }
 const LISTED_COUNT = 12
 
 /** A share with its interval, in percent: "62% (48% to 75%)"; the point alone where no interval could be read. */
@@ -56,7 +57,7 @@ function HorizonTable({ rows, i18n }: { rows: readonly BoardHorizon[]; i18n: I18
         <tbody>
           {rows.map((row) => (
             <tr key={row.h}>
-              <td style={{ ...cellStyle, fontWeight: 600 }}>{t(HORIZON_NAME[row.h])}</td>
+              <td style={{ ...cellStyle, fontWeight: 600 }}>{t(BOARD_HORIZON_NAME[row.h])}</td>
               <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>{num(row.n, 0, 0)}</td>
               <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>{row.pointedShare === null ? '—' : pctPlain(row.pointedShare * 100, 0)}</td>
               <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>{shareOf(row.pointed.rightOnRising, i18n)}</td>
@@ -112,7 +113,7 @@ export function AccuracyBoardView({ board, span, onSpan }: { board: AccuracyBoar
               <span style={{ fontWeight: 600 }}>{t('The latest forecasts checked:')}</span>
               {listed.map((entry) => (
                 <span key={`${entry.pair}:${entry.h}:${entry.t}`} style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  <bdi dir="ltr">{entry.pair}</bdi> · {t(HORIZON_NAME[entry.h])} · {entryText(entry, i18n)}
+                  <bdi dir="ltr">{entry.pair}</bdi> · {t(BOARD_HORIZON_NAME[entry.h])} · {entryText(entry, i18n)}
                 </span>
               ))}
             </div>

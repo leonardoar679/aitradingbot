@@ -66,6 +66,8 @@ import { healUiMode } from './uiMode'
 import { healLanguage } from './i18n/languages'
 import { FORECAST_DATA_VERSION, FORECAST_HISTORY_DAYS } from './forecast/bars'
 import { CALIBRATION_LINES, CALIBRATION_VERSION } from './forecast/calibration'
+import { DAILY_SIZE_LINES } from './forecast/daily/dailySize'
+import { DAILY_RECORD_VERSION } from './forecast/daily/dailyRecord'
 import { DIRECTION_LINES } from './forecast/direction'
 import { ENSEMBLE_LINES, ENSEMBLE_VERSION } from './forecast/ensemble'
 import { CLASS_LINES, FEATURES_VERSION, PEG_RANGE } from './forecast/features'
@@ -229,6 +231,8 @@ export const ENGINE_CONSTANTS = {
     path: { excursion: { levels: EXCURSION_LEVELS, version: EXCURSION_CALIBRATION_VERSION, minRows: EXCURSION_MIN_ROWS }, touch: { version: FIRST_TOUCH_VERSION, ...FIRST_TOUCH } },
     ensemble: { version: ENSEMBLE_VERSION, ...ENSEMBLE_LINES },
     calibration: { version: CALIBRATION_VERSION, run: RUN_CALIBRATION_VERSION, ...CALIBRATION_LINES },
+    // The daily forecast (V10 Stage 4; V10-DAILY-SIZE held): its rule's lines and its record's version.
+    daily: { ...DAILY_SIZE_LINES, record: DAILY_RECORD_VERSION },
     // What the figures are worth (V7.2 Stage 1): the intervals' draws, seed, blocks by horizon, level, and the
     // standard deviations a skill must reach to be told from zero.
     uncertainty: { version: UNCERTAINTY_VERSION, ...UNCERTAINTY_LINES },

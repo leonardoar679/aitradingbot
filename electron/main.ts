@@ -9,6 +9,7 @@ import { startResearchFolder } from './services/researchFolderService'
 import { startVenueQuotes } from './services/venueQuotesService'
 import { startPredictionLedger } from './services/predictionLedgerService'
 import { startAccuracyBoard } from './services/accuracyBoardService'
+import { startDailyForecast } from './services/dailyForecastService'
 import { startBookMarks } from './services/booksService'
 import { startPrimaryCall } from './services/primaryCallService'
 import { startNewsUrls } from './services/newsUrlService'
@@ -223,6 +224,9 @@ if (!gotSingleInstanceLock) {
     void startPredictionLedger().catch((error) => console.error('The prediction record could not start:', error))
     // The accuracy board (V10 Stage 2; accuracyBoardService.ts): what it kept read back, or the days before read once.
     void startAccuracyBoard().catch((error) => console.error('The accuracy board could not start:', error))
+    // The daily forecast (V10 Stage 4; dailyForecastService.ts): sizes over one, three and seven days, made a little after
+    // each UTC day opens from Binance's public daily bars. Calls no way, places nothing.
+    startDailyForecast()
     // V8's three paper books marked once an hour while they run (V8 Stage 2; booksService.ts): nothing while stopped.
     startBookMarks()
     // The primary call weighed every minute and as the announcements are read (V8 Stage 3; primaryCallService.ts): a

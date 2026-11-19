@@ -2569,5 +2569,12 @@
   "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "予想変動幅は、予測がどちらの方向にも見込む変動の大きさです。11月9日から16日の7日間の運用では、実際の変動はその0.91～1.06倍でした。",
   "Expected move {size} within {span}": "{span}以内の予想変動幅 {size}",
   "not forecast: no way is known; the move it expects either way is {size}": "予測なし：方向は不明。どちらの方向にも見込む変動幅は {size}",
-  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "{horizon}以内にどちらの方向にも ±{size} の変動を見込んでいます。大きさは測定済みで、方向は測定されていません。"
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "{horizon}以内にどちらの方向にも ±{size} の変動を見込んでいます。大きさは測定済みで、方向は測定されていません。",
+  "3 days": "3日",
+  "7 days": "7日",
+  "The next days": "これからの数日",
+  "Each coin's expected move either way over one, three and seven days from today's open, and its 80% range. The size held on January 2024 to October 2026: eight outcomes in ten inside the range, the real moves 1.00 to 1.06 times the size. Which way is unknown: the test of a way over these days failed.": "各コインの、本日の始値から1日・3日・7日でのどちらの方向にも予想される変動幅と、その80%レンジ。この大きさは2024年1月から2026年10月まで保たれました：10回中8回がレンジ内に収まり、実際の変動は予想幅の1.00～1.06倍でした。方向は不明です：この期間の方向の検証は不合格でした。",
+  "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "日次の予測はまだありません：毎日00:00 UTCに日が始まった少し後に作成されます。",
+  "Made {when}, from the day's open.": "{when}に、その日の始値から作成。",
+  "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "本日の始値からどちらの方向にも予想される変動幅：1日で ±{day1}、3日で ±{days3}、7日で ±{days7}。"
 }

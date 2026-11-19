@@ -14,6 +14,8 @@ import type { RoundTrip } from '../../../shared/venueCosts'
 import { venueCostOf } from '../../services/venueQuotesService'
 import { getForecastReplayState } from '../../services/forecastReplayService'
 import { accuracyBoard } from '../../services/accuracyBoardService'
+import { dailyForecastView } from '../../services/dailyForecastService'
+import type { DailyForecastView } from '../../../shared/forecast/daily/dailyRecord'
 import type { AccuracyBoard } from '../../../shared/evaluation/accuracyBoard'
 
 // The price forecast (the V6 document; V6 Stage 7): what it stands at, every pair's latest forecast,
@@ -48,6 +50,8 @@ export function registerForecastHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.ForecastRecord, (_event, fromSec: unknown, toSec: unknown): Promise<ForecastHistory> => forecastRecordSpan(fromSec, toSec))
   // The accuracy board (V10 Stage 2): the forecast's settled outcomes counted by day and horizon. It only reads.
   ipcMain.handle(IpcChannel.ForecastBoard, (): Promise<AccuracyBoard> => accuracyBoard())
+  // The daily forecast (V10 Stage 4): each coin's size over one, three and seven days. It only reads.
+  ipcMain.handle(IpcChannel.ForecastDaily, (): DailyForecastView => dailyForecastView())
   // Champion and challenger (V7.1 Stage 13): the run before the one in use put back, by a person; it moves
   // models and verdicts and nothing else -- no key, no cap, no kill switch, no strategy.
   ipcMain.handle(IpcChannel.ForecastRollback, (): Promise<{ ok: boolean; error: string | null }> => rollbackForecastRun())

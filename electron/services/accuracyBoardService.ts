@@ -3,7 +3,9 @@ import { createReadStream, existsSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { createInterface } from 'readline'
-import { ACCURACY_BOARD_VERSION, BOARD_LINES, accuracyBoardOf, addToTally, boardDayOf, boardEntryOf, emptyTally, type AccuracyBoard, type BoardDay, type BoardEntry } from '../../shared/evaluation/accuracyBoard'
+import { ACCURACY_BOARD_VERSION, BOARD_LINES, accuracyBoardOf, addToTally, boardDayOf, boardEntryOf, dailyBoardEntryOf, emptyTally, type AccuracyBoard, type BoardDay, type BoardEntry, type BoardHorizonKey, type BoardOutcome } from '../../shared/evaluation/accuracyBoard'
+import type { DailyOutcomeLine } from '../../shared/forecast/daily/dailyRecord'
+import { DAILY_HORIZONS } from '../../shared/forecast/daily/dailySize'
 import { HORIZONS, type Horizon } from '../../shared/forecast/features'
 import { isMissing, parseOutcomeLine, parsePredictionLine, recordMonth, type MissingOutcomeLine, type OutcomeLine } from '../../shared/forecast/forecastRecord'
 import { expectedMove } from '../../shared/forecast/size'
@@ -36,7 +38,7 @@ export const boardSeam = {
   write: (path: string, data: unknown): Promise<void> => writeJsonAtomic(path, data)
 }
 
-const keyOf = (day: number, h: Horizon): string => `${day}/${h}`
+const keyOf = (day: number, h: BoardHorizonKey): string => `${day}/${h}`
 let days = new Map<string, BoardDay>()
 let recent: BoardEntry[] = []
 let updatedAt: number | null = null
@@ -51,7 +53,7 @@ function oldestKept(nowSec: number): number {
 }
 
 /** An outcome counted into its day; days past the kept thirty are dropped by trim, after each batch. */
-function count(outcome: OutcomeLine): void {
+function count(outcome: BoardOutcome & { h: BoardHorizonKey; at?: number; due: number }): void {
   const day = boardDayOf(outcome)
   const key = keyOf(day, outcome.h)
   let entry = days.get(key)
@@ -98,6 +100,19 @@ export function takeBoardOutcomes(lines: readonly (OutcomeLine | MissingOutcomeL
   for (const outcome of measured) {
     count(outcome)
     recent.push(boardEntryOf(outcome))
+  }
+  updatedAt = boardSeam.nowSec()
+  trim()
+  schedulePersist()
+  told()
+}
+
+/** The daily forecast's outcomes as they are settled (dailyForecastService.ts calls it): counted on their days. */
+export function takeBoardDailyOutcomes(lines: readonly DailyOutcomeLine[]): void {
+  if (lines.length === 0) return
+  for (const outcome of lines) {
+    count({ ...outcome, dir: 'NEUTRAL' })
+    recent.push(dailyBoardEntryOf(outcome))
   }
   updatedAt = boardSeam.nowSec()
   trim()
@@ -199,7 +214,7 @@ export function startAccuracyBoard(): Promise<void> {
 /** The board as the window shows it. */
 export async function accuracyBoard(): Promise<AccuracyBoard> {
   await startAccuracyBoard()
-  return accuracyBoardOf([...days.values()], recent, HORIZONS, updatedAt, filling)
+  return accuracyBoardOf([...days.values()], recent, [...HORIZONS, ...DAILY_HORIZONS], updatedAt, filling)
 }
 
 export function onAccuracyBoard(listener: () => void): () => void {

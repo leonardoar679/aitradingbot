@@ -17,6 +17,7 @@ import { callColor, callLabel, decisionWords, firstReason, forecastBehindText, f
 import { msg, useI18n } from '../i18n'
 import { BestPredictionCard } from './BestPredictionCard'
 import { CallLines } from '../calls/CallLines'
+import { NextDaysCard } from './NextDaysCard'
 import { PrimaryCallCard } from '../calls/PrimaryCallCard'
 import { usePrimaryCall } from '../calls/usePrimaryCall'
 import type { UiMode } from '../../shared/uiMode'
@@ -85,6 +86,7 @@ export function PredictionsPage({ onPrepareOrder, uiMode = 'normal' }: { onPrepa
       <PrimaryCallCard state={calls} predictions={forecasts} livePrice={cardPrice} />
       {!expert && <CallLines state={calls} predictions={predictions} pairs={ranking?.ranked.map((entry) => entry.pair) ?? []} onOpen={setOpen} />}
       <BigMoversView predictions={forecasts} onOpen={setOpen} />
+      <NextDaysCard onOpen={setOpen} />
       {expert && (
         <BestPredictionCard prediction={best === null ? null : (predictions.get(best.pair) ?? null)} ranked={best} live={live} onDetails={setOpen} onPrepareOrder={onPrepareOrder} />
       )}

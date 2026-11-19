@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card } from '../components/Card'
 import { noteStyle } from '../agents/agentStyles'
 import type { BtcTodayView } from '../../shared/forecast/btcDay'
+import type { DailyForecastView } from '../../shared/forecast/daily/dailyRecord'
 import { nextReleases, type MacroKind } from '../../shared/calendar/macro'
 import type { MarketShockState } from '../../shared/forecast/marketShock'
 import { marketStateWord, signedPct } from '../forecast/forecastWords'
@@ -25,12 +26,19 @@ const KIND_NAMES: Record<MacroKind, string> = {
 /** The tile, reading Bitcoin's day every minute. */
 export function BitcoinTodayTile({ marketState }: { marketState: string | null }): React.JSX.Element {
   const [view, setView] = useState<BtcTodayView | null>(null)
+  const [daily, setDaily] = useState<DailyForecastView | null>(null)
   useEffect(() => {
     let cancelled = false
     const read = (): void => {
       void window.api.forecast.btcToday().then(
         (next) => {
           if (!cancelled) setView(next)
+        },
+        () => undefined
+      )
+      void window.api.forecast.daily().then(
+        (next) => {
+          if (!cancelled) setDaily(next)
         },
         () => undefined
       )
@@ -45,14 +53,16 @@ export function BitcoinTodayTile({ marketState }: { marketState: string | null }
       stop()
     }
   }, [])
-  return <BitcoinTodayCard view={view} marketState={marketState} />
+  return <BitcoinTodayCard view={view} marketState={marketState} daily={daily} />
 }
 
 /** What the tile shows of a reading: the day so far, the big days of the last 90, the next release, the market's
  * state and the way, which no measured source calls. */
-export function BitcoinTodayCard({ view, marketState }: { view: BtcTodayView | null; marketState: string | null }): React.JSX.Element {
+export function BitcoinTodayCard({ view, marketState, daily = null }: { view: BtcTodayView | null; marketState: string | null; daily?: DailyForecastView | null }): React.JSX.Element {
   const i18n = useI18n()
-  const { t, num } = i18n
+  const { t, num, pctPlain } = i18n
+  // Bitcoin's size over the coming days (V10 Stage 4; V10-DAILY-SIZE held).
+  const coming = daily?.rows.find((row) => row.pair === 'BTCUSDT')?.h ?? null
   const nowSec = view?.at ?? Math.floor(Date.now() / 1000)
   const next = nextReleases(nowSec, 1)[0] ?? null
   const today = view?.today ?? null
@@ -73,6 +83,11 @@ export function BitcoinTodayCard({ view, marketState }: { view: BtcTodayView | n
               close4: num(days.close4, 0, 0),
               fall4: num(days.fall4, 0, 0)
             })}
+          </span>
+        )}
+        {coming !== null && coming.day1 !== undefined && coming.days3 !== undefined && coming.days7 !== undefined && (
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {t("Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.", { day1: pctPlain(coming.day1.size, 2), days3: pctPlain(coming.days3.size, 2), days7: pctPlain(coming.days7.size, 2) })}
           </span>
         )}
         {next !== null && <span>{t('Next release: {kind}, {when}', { kind: t(KIND_NAMES[next.kind]), when: utcWhen(i18n, next.at * 1000) })}</span>}

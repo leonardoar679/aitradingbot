@@ -22,6 +22,7 @@ import type { CloneSignal, FollowStatus, LeaderEvent } from '../shared/traders/f
 import type { DiscoveryState } from '../shared/traders/discovery'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { AccuracyBoard } from '../shared/evaluation/accuracyBoard'
+import type { DailyForecastView } from '../shared/forecast/daily/dailyRecord'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
 import type {
@@ -224,6 +225,8 @@ const api = {
     record: (fromSec: number, toSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastRecord, fromSec, toSec),
     /** The accuracy board (V10 Stage 2): way, size and range of the settled forecasts, by day and horizon. */
     board: (): Promise<AccuracyBoard> => ipcRenderer.invoke(IpcChannel.ForecastBoard),
+    /** The daily forecast (V10 Stage 4): each coin's expected move and 80% range over one, three and seven days. */
+    daily: (): Promise<DailyForecastView> => ipcRenderer.invoke(IpcChannel.ForecastDaily),
     onUpdate: (listener: (closedAt: number | null) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, closedAt: number | null): void => listener(closedAt)
       ipcRenderer.on(IpcChannel.ForecastUpdate, handler)

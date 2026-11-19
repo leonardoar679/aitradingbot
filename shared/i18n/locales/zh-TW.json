@@ -2569,5 +2569,12 @@
   "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "預期變動是預測在任一方向上預期的變動幅度；在 11 月 9 日至 16 日的七天運行中，實際變動為其 0.91 至 1.06 倍。",
   "Expected move {size} within {span}": "{span}內預期變動 {size}",
   "not forecast: no way is known; the move it expects either way is {size}": "無預測：方向未知；任一方向的預期變動為 {size}",
-  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "它預期{horizon}內任一方向變動 ±{size}：幅度已測量，方向未測量。"
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "它預期{horizon}內任一方向變動 ±{size}：幅度已測量，方向未測量。",
+  "3 days": "3 天",
+  "7 days": "7 天",
+  "The next days": "接下來幾天",
+  "Each coin's expected move either way over one, three and seven days from today's open, and its 80% range. The size held on January 2024 to October 2026: eight outcomes in ten inside the range, the real moves 1.00 to 1.06 times the size. Which way is unknown: the test of a way over these days failed.": "每個幣種從今日開盤起 1 天、3 天和 7 天內任一方向的預期變動，及其 80% 區間。這一幅度在 2024 年 1 月至 2026 年 10 月間成立：十次中有八次落在區間內，實際變動為預期幅度的 1.00 至 1.06 倍。方向未知：這些天數的方向檢驗未通過。",
+  "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "還沒有每日預測：每天 00:00 UTC 開盤後不久產生。",
+  "Made {when}, from the day's open.": "{when}產生，基於當日開盤。",
+  "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "自今日開盤起任一方向的預期變動：1 天 ±{day1}，3 天 ±{days3}，7 天 ±{days7}。"
 }

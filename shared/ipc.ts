@@ -77,6 +77,7 @@ export const IpcChannel = {
   ForecastBtcToday: 'forecast:btcToday',
   ForecastRecord: 'forecast:record',
   ForecastBoard: 'forecast:board',
+  ForecastDaily: 'forecast:daily',
   ForecastUpdate: 'forecast:update',
   FeedUpdate: 'feed:update',
   FeedOpenLink: 'feed:openLink',

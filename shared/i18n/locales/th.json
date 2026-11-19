@@ -2569,5 +2569,12 @@
   "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "การเคลื่อนไหวที่คาดไว้คือขนาดที่การคาดการณ์คาดไว้ไม่ว่าทางใด ในการทดสอบเจ็ดวันระหว่าง 9 ถึง 16 พฤศจิกายน การเคลื่อนไหวจริงอยู่ที่ 0.91 ถึง 1.06 เท่าของมัน",
   "Expected move {size} within {span}": "การเคลื่อนไหวที่คาดไว้ {size} ภายใน {span}",
   "not forecast: no way is known; the move it expects either way is {size}": "ไม่มีการคาดการณ์: ไม่ทราบทิศทาง การเคลื่อนไหวที่คาดไว้ไม่ว่าทางใดคือ {size}",
-  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "คาดว่าจะเคลื่อนไหว ±{size} ไม่ว่าทางใดภายใน {horizon} ขนาดวัดได้แล้ว ส่วนทิศทางยังไม่ได้วัด"
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "คาดว่าจะเคลื่อนไหว ±{size} ไม่ว่าทางใดภายใน {horizon} ขนาดวัดได้แล้ว ส่วนทิศทางยังไม่ได้วัด",
+  "3 days": "3 วัน",
+  "7 days": "7 วัน",
+  "The next days": "วันข้างหน้า",
+  "Each coin's expected move either way over one, three and seven days from today's open, and its 80% range. The size held on January 2024 to October 2026: eight outcomes in ten inside the range, the real moves 1.00 to 1.06 times the size. Which way is unknown: the test of a way over these days failed.": "การเคลื่อนไหวที่คาดไว้ของแต่ละเหรียญไม่ว่าทางใดใน 1 3 และ 7 วันจากราคาเปิดวันนี้ และช่วง 80% ของมัน ขนาดนี้ยืนได้ตั้งแต่มกราคม 2024 ถึงตุลาคม 2026 ผลลัพธ์ 8 ใน 10 อยู่ในช่วง การเคลื่อนไหวจริงเป็น 1.00 ถึง 1.06 เท่าของขนาด ไม่ทราบทิศทาง การทดสอบทิศทางในช่วงวันเหล่านี้ไม่ผ่าน",
+  "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "ยังไม่มีการคาดการณ์รายวัน จะสร้างหลังเริ่มวันใหม่เวลา 00:00 UTC เล็กน้อย",
+  "Made {when}, from the day's open.": "สร้างเมื่อ {when} จากราคาเปิดของวัน",
+  "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "การเคลื่อนไหวที่คาดไว้ไม่ว่าทางใดจากราคาเปิดวันนี้: ±{day1} ใน 1 วัน ±{days3} ใน 3 วัน ±{days7} ใน 7 วัน"
 }

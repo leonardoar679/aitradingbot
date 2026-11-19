@@ -53,6 +53,9 @@ const ADDED_SINCE_16_OCTOBER = [
 // source like every other, and reported for what they are.
 const INFRASTRUCTURE = [
   'forecast.uncertainty',
+  // The daily forecast's rule (V10 Stage 4): measured by V10-DAILY-SIZE (research/v10DailySize.ts reads these very lines)
+  // before it became an engine constant, its result line on file.
+  'forecast.daily',
   'forecast.pass',
   'forecast.tape',
   'forecast.moveRates',

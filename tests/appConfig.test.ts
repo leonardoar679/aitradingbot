@@ -84,8 +84,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // unasked read as a theft, and a miners' theft as about crypto (feed-v6; V9 Stage 9), from 032fcf5e5d30. The same day: a
 // found trader whose analysis lost reads analysed again six hours on, twice at most (V9 Stage 9), from 3b8dc5d5951f.
 // The ranges calibrated about no move, their adaptive step once a horizon's outcomes (calibration-v2, run-calibration-v8;
-// V10-LEAN held, V10 Stage 1), from 8b4cd77a1a43.
-const PINNED_ENGINE_VERSION = '3f810f5eaeee'
+// V10-LEAN held, V10 Stage 1), from 8b4cd77a1a43. The daily forecast's rule and record over one, three and seven days
+// (V10-DAILY-SIZE held, V10 Stage 4), from 3f810f5eaeee.
+const PINNED_ENGINE_VERSION = 'c1b88462b556'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

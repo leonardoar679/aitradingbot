@@ -2569,5 +2569,12 @@
   "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "الحركة المتوقعة هي الحجم الذي يتوقعه التوقع في أي اتجاه؛ في تشغيل الأيام السبعة من 9 إلى 16 نوفمبر بلغت الحركات الفعلية من 0.91 إلى 1.06 ضعفه.",
   "Expected move {size} within {span}": "الحركة المتوقعة {size} خلال {span}",
   "not forecast: no way is known; the move it expects either way is {size}": "لا توقع: لا اتجاه معروف؛ الحركة التي يتوقعها في أي اتجاه {size}",
-  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "يتوقع حركة بمقدار ±{size} في أي اتجاه خلال {horizon}: الحجم مقيس، والاتجاه ليس كذلك."
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "يتوقع حركة بمقدار ±{size} في أي اتجاه خلال {horizon}: الحجم مقيس، والاتجاه ليس كذلك.",
+  "3 days": "3 أيام",
+  "7 days": "7 أيام",
+  "The next days": "الأيام القادمة",
+  "Each coin's expected move either way over one, three and seven days from today's open, and its 80% range. The size held on January 2024 to October 2026: eight outcomes in ten inside the range, the real moves 1.00 to 1.06 times the size. Which way is unknown: the test of a way over these days failed.": "الحركة المتوقعة لكل عملة في أي اتجاه خلال يوم وثلاثة وسبعة أيام من افتتاح اليوم، ونطاقها 80%. صمد الحجم من يناير 2024 إلى أكتوبر 2026: ثماني نتائج من عشر داخل النطاق، والحركات الفعلية من 1.00 إلى 1.06 ضعف الحجم. الاتجاه مجهول: فشل اختبار الاتجاه على هذه الأيام.",
+  "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "لا يوجد توقع يومي بعد: يُعدّ بعد افتتاح كل يوم في 00:00 UTC بقليل.",
+  "Made {when}, from the day's open.": "أُعدّ {when}، من افتتاح اليوم.",
+  "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "الحركة المتوقعة في أي اتجاه من افتتاح اليوم: ±{day1} خلال يوم، و±{days3} خلال ثلاثة، و±{days7} خلال سبعة."
 }

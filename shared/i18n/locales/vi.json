@@ -2569,5 +2569,12 @@
   "The expected move is the size the forecast expects either way; on the seven-day run of 9 to 16 November the real moves came to 0.91 to 1.06 times it.": "Biến động dự kiến là mức độ mà dự báo kỳ vọng theo hướng bất kỳ; trong lần chạy bảy ngày từ 9 đến 16 tháng 11, biến động thực bằng 0,91 đến 1,06 lần mức đó.",
   "Expected move {size} within {span}": "Biến động dự kiến {size} trong {span}",
   "not forecast: no way is known; the move it expects either way is {size}": "không dự báo: chưa biết hướng; biến động dự kiến theo hướng bất kỳ là {size}",
-  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "Nó dự kiến biến động ±{size} theo hướng bất kỳ trong {horizon}: kích thước đã được đo, hướng thì chưa."
+  "It expects a move of ±{size} either way within {horizon}: the size is measured, the way is not.": "Nó dự kiến biến động ±{size} theo hướng bất kỳ trong {horizon}: kích thước đã được đo, hướng thì chưa.",
+  "3 days": "3 ngày",
+  "7 days": "7 ngày",
+  "The next days": "Những ngày tới",
+  "Each coin's expected move either way over one, three and seven days from today's open, and its 80% range. The size held on January 2024 to October 2026: eight outcomes in ten inside the range, the real moves 1.00 to 1.06 times the size. Which way is unknown: the test of a way over these days failed.": "Biến động dự kiến của mỗi đồng coin theo hướng bất kỳ trong một, ba và bảy ngày tính từ giá mở cửa hôm nay, cùng khoảng 80% của nó. Kích thước này đứng vững từ tháng 1 năm 2024 đến tháng 10 năm 2026: tám trên mười kết quả nằm trong khoảng, biến động thực bằng 1,00 đến 1,06 lần kích thước. Chưa biết hướng: kiểm định về hướng cho những ngày này đã thất bại.",
+  "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "Chưa có dự báo theo ngày: dự báo được tạo ngay sau khi mỗi ngày bắt đầu lúc 00:00 UTC.",
+  "Made {when}, from the day's open.": "Tạo lúc {when}, từ giá mở cửa của ngày.",
+  "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "Biến động dự kiến theo hướng bất kỳ từ giá mở cửa hôm nay: ±{day1} trong một ngày, ±{days3} trong ba ngày, ±{days7} trong bảy ngày."
 }

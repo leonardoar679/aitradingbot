@@ -1,3 +1,5 @@
+import type { DailyOutcomeLine } from '../forecast/daily/dailyRecord'
+import type { DailyHorizon } from '../forecast/daily/dailySize'
 import type { Horizon } from '../forecast/features'
 import type { OutcomeLine } from '../forecast/forecastRecord'
 
@@ -16,6 +18,19 @@ import type { OutcomeLine } from '../forecast/forecastRecord'
 // It reads what is recorded and decides nothing.
 
 export const ACCURACY_BOARD_VERSION = 'accuracy-board-v1'
+
+/** A horizon the board reads: the five-minute forecast's, or the daily forecast's (V10 Stage 4). */
+export type BoardHorizonKey = Horizon | DailyHorizon
+
+/** What the board reads of an outcome: its move, where it fell, the way called and the middle and size expected. */
+export interface BoardOutcome {
+  move: number
+  below: string
+  in80: boolean
+  dir?: OutcomeLine['dir']
+  mid?: number
+  size?: number
+}
 
 export const BOARD_LINES = {
   version: ACCURACY_BOARD_VERSION,
@@ -58,7 +73,7 @@ export interface BoardTally {
 
 export interface BoardDay {
   day: number
-  h: Horizon
+  h: BoardHorizonKey
   tally: BoardTally
 }
 
@@ -75,7 +90,7 @@ export function pointsOf(mid: number | undefined): 'up' | 'down' | null {
 
 /** A settled outcome counted into a tally (in place). An outcome without its middle (one written before V10) counts in
  * the range alone, and in the size where it has one. */
-export function addToTally(tally: BoardTally, outcome: Pick<OutcomeLine, 'move' | 'below' | 'in80' | 'dir' | 'mid' | 'size'>): void {
+export function addToTally(tally: BoardTally, outcome: BoardOutcome): void {
   tally.n++
   if (outcome.in80) tally.in80++
   if (outcome.below[0] === '1') tally.belowP10++
@@ -135,7 +150,7 @@ export interface WayFigures {
 }
 
 export interface BoardHorizon {
-  h: Horizon
+  h: BoardHorizonKey
   days: number
   n: number
   /** The share of the outcomes whose middle pointed a way, and that way read. */
@@ -211,7 +226,7 @@ function figuresOverDays(days: readonly BoardTally[], names: readonly string[]):
 }
 
 /** A horizon's board over the days given (each day's tally once). */
-export function boardHorizonOf(h: Horizon, days: readonly BoardTally[]): BoardHorizon {
+export function boardHorizonOf(h: BoardHorizonKey, days: readonly BoardTally[]): BoardHorizon {
   const total = sumTallies(days)
   const figures = figuresOverDays(days, Object.keys(STATISTICS))
   const way = (prefix: 'pointed' | 'called', n: number): WayFigures => ({ n, rightOnRising: figures[`${prefix}Rising`], rightOnFalling: figures[`${prefix}Falling`], balanced: figures[`${prefix}Balanced`] })
@@ -233,7 +248,7 @@ export function boardHorizonOf(h: Horizon, days: readonly BoardTally[]): BoardHo
 /** One settled forecast as the board lists it: what it expected, and what came. */
 export interface BoardEntry {
   pair: string
-  h: Horizon
+  h: BoardHorizonKey
   /** When it was forecast and when settled, in seconds. */
   t: number
   at: number
@@ -260,6 +275,11 @@ export function boardEntryOf(outcome: OutcomeLine): BoardEntry {
   }
 }
 
+/** A daily forecast's outcome as the board lists it (V10 Stage 4): no way is called at these horizons. */
+export function dailyBoardEntryOf(outcome: DailyOutcomeLine): BoardEntry {
+  return { pair: outcome.pair, h: outcome.h, t: outcome.day, at: outcome.at, mid: outcome.mid, size: outcome.size, move: outcome.move, in80: outcome.in80, called: null }
+}
+
 /** What the window is told: each horizon over the kept days and over the last day, and the latest settled forecasts. */
 export interface AccuracyBoard {
   version: typeof ACCURACY_BOARD_VERSION
@@ -277,11 +297,11 @@ export interface AccuracyBoard {
 }
 
 /** The board from its days and latest entries. */
-export function accuracyBoardOf(days: readonly BoardDay[], recent: readonly BoardEntry[], horizons: readonly Horizon[], updatedAt: number | null, filling = false): AccuracyBoard {
+export function accuracyBoardOf(days: readonly BoardDay[], recent: readonly BoardEntry[], horizons: readonly BoardHorizonKey[], updatedAt: number | null, filling = false): AccuracyBoard {
   const kept = days.filter((entry) => entry.tally.n > 0)
   const dayStarts = [...new Set(kept.map((entry) => entry.day))].sort((a, b) => a - b)
   const newest = dayStarts.length === 0 ? null : dayStarts[dayStarts.length - 1]
-  const byHorizon = (h: Horizon, only?: number): BoardHorizon => boardHorizonOf(h, kept.filter((entry) => entry.h === h && (only === undefined || entry.day === only)).map((entry) => entry.tally))
+  const byHorizon = (h: BoardHorizonKey, only?: number): BoardHorizon => boardHorizonOf(h, kept.filter((entry) => entry.h === h && (only === undefined || entry.day === only)).map((entry) => entry.tally))
   return {
     version: ACCURACY_BOARD_VERSION,
     updatedAt,
