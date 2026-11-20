@@ -246,16 +246,20 @@ const tallyOf = (day: number, h: string): BoardTally => {
   if (tally === undefined) recount.set(key, (tally = emptyTally()))
   return tally
 }
+const boardPath = join(FORECASTS, 'accuracy-board.json')
+const board = existsSync(boardPath) ? (JSON.parse(readFileSync(boardPath, 'utf-8')) as { updatedAt: number | null; countedTo?: number | null; dailyCountedTo?: number | null; days: { day: number; h: string; tally: BoardTally }[] }) : null
+// Read while the run goes on, the board's file is written a minute after each close's outcomes: the records are then
+// recounted up to its last count alone. Once the run has ended (the app writes the board as it quits), all of them.
+const upTo = ended ? Infinity : (board?.countedTo ?? Infinity)
+const dailyUpTo = ended ? Infinity : (board?.dailyCountedTo ?? Infinity)
 for (const path of filesOf(FORECASTS, /^outcomes-\d{4}-\d{2}\.jsonl$/)) {
   await eachLine(path, (value) => {
     const line = parseOutcomeLine(value)
-    if (line === null || isMissing(line)) return
+    if (line === null || isMissing(line) || (line.at ?? line.due) > upTo) return
     addToTally(tallyOf(boardDayOf(line), line.h), line as OutcomeLine)
   })
 }
-for (const line of dailyOutcomes) if (line !== null) addToTally(tallyOf(boardDayOf(line), line.h), { ...line, dir: 'NEUTRAL' })
-const boardPath = join(FORECASTS, 'accuracy-board.json')
-const board = existsSync(boardPath) ? (JSON.parse(readFileSync(boardPath, 'utf-8')) as { updatedAt: number | null; days: { day: number; h: string; tally: BoardTally }[] }) : null
+for (const line of dailyOutcomes) if (line !== null && line.at <= dailyUpTo) addToTally(tallyOf(boardDayOf(line), line.h), { ...line, dir: 'NEUTRAL' })
 const mismatches: { day: string; h: string; field: string; board: number; records: number }[] = []
 let compared = 0
 if (board !== null && board.days.length > 0) {
