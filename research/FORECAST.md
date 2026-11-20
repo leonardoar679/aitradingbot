@@ -1280,3 +1280,83 @@ a Binance delisting. Critical news is told once, for its first report, by its vi
 4 of 6 thefts' first reports, and too few loud notices came to judge whether they were right. The rankings found two
 traders whose records read as skill beyond chance, and neither can be followed; following the panel on paper lost 2.9%
 in a week. V9-COPY-FORWARD and V9-TOP-TRADERS-2 are judged on the forward record once it is long enough.
+
+## V10: predictions you can check, and an honest search for the way (Stages 0-8, 19-20 November 2026)
+
+On 19 November the user said the predictions were a mess: no real direction, and a predicted percent under a tenth of
+the real change. They asked that each prediction be checked when its time is up -- was the way right, and how much of
+the predicted move came -- and that every method be used: AI, copy trading, formulas. Their three answers: a forward
+test of AI's way at $1 a day, $30 at most; Home shows up or down only, a "which coins beat the others" result staying in
+this report; and a 30-day forward run. Every claim below was registered before it was measured.
+
+**What the records said first.** Read on the V9 run's week (9 to 16 November), the forecast knew
+the size of the move: it expected 0.32%, 1.03%, 2.17% and 5.44% either way at five minutes, an hour, four hours and a
+day, and the real moves were 1.06, 0.99, 0.97 and 0.91 times that, the coins it expected to move most moving most (rank
+correlation +0.29 to +0.48). The "0.01-0.03%" the user saw was the middle value, P50, which with no way known sits near
+no move: it is not the size. The way was not known. At a day the middle pointed the right way 68.8% of the time, but it
+was below nought for every coin all week while Bitcoin fell from 74,778 to 64,213, and on the one rising day it was
+right 33% of the time: a lean, not a call. It came from the calibration, not the models (their own centre +0.04%, the
+shown one -1.79%): about two thirds from the self-correcting step, which at a day moved 96 times a day and so followed
+the last day's trend, the rest from the median shift learned on the last four test weeks. The AI's 436 buy or sell calls
+on file with prices (3,023 answers, October and November) were right 48.9% at their four hours [41%, 56%], 424 of them
+buys. The copy book lost 2.9% in the week.
+
+| line | verdict | what it rests on |
+|---|---|---|
+| V10-LEAN | **held** | ten held-out folds of the long walk forward, 25 November 2025 to 1 September 2026, 141 pairs, about 300,000 rows a horizon: the band centred at no move, its step taken once a horizon's outcomes, covered 79.75% to 81.02% from five minutes to a day, each tail 8.0% to 10.8% in rising and falling months alike, pinball -10.42% at a day against the shipped calibration (which covered 76.19%); shipped as calibration-v2 (d6fdf10) |
+| V10-TSMOM | **failed** | a coin's own 28-day trend called seven days ahead, chosen on 2018-2023, held out (January 2024 to October 2026): 49.4% balanced [46.2%, 52.6%] on 5,703 calls; no way is called from a coin's own trend at one to seven days |
+| V10-XSMOM | reported | each week's strongest fifth by 28-day return beat the week's median move, and the weakest fifth trailed it, 52.5% of the time held out [50.0%, 55.2%] on 2,324 calls, +0.405% a call top less bottom after costs: a small relative edge on years it had not read. It says which coins do better than the others, not which way the market goes, and by the user's answer it is no call on Home |
+| V10-EXPL | reported | Fear and Greed, the stablecoins' supply, DVOL and funding at their extremes, Bitcoin's way at three and seven days: 13 to 142 calls each, none the same way on both halves with enough calls to tell from chance |
+| V10-DAILY-SIZE | **held** | the daily rule's 80% ranges, symmetric about no move, on calls from January 2024 to October 2026: 79.6%, 79.4% and 79.6% at one, three and seven days, each tail 9.4% to 11.0%, the real moves 1.057, 1.033 and 1.004 times the size expected |
+| V10-AI-FORWARD | counting | the deciding model's ten daily calls, judged on the run's first 30 UTC days asked (below) |
+| V10-FORWARD | counting | the 30-day run's gates (below) |
+
+**What changed in the app.**
+- *The lean is gone.* The ranges are calibrated about no move and the self-correcting step is taken once a horizon's
+  outcomes, not every fifteen minutes (calibration-v2, run-calibration-v8). The forecast's way is shown only where a
+  direction model clears its own bar with a middle at or above nought (or at or below for down); no arrival time is
+  given for a middle at no move. The user's app refits once after its rebuild.
+- *Each prediction is checked* (50decf3). The accuracy board on Performance, and its tile on Home, reads every settled
+  forecast from five minutes to seven days, by day and over 30 days: right on the rises and right on the falls apart
+  (a constant lean reads 100% and 0%, and their mean, the balanced accuracy, exactly 50%), the real size over the size
+  expected, and inside the 80% range; each with its count and a 95% interval by days; every source on the same board.
+  Read on the V9 run's records it showed the old lean at once: at a day, right on 0% of the rises and 100% of the falls.
+- *The size is the prediction* (9f110ed): "expected move ±X% in 4 hours, 80% range a to b, way unknown", on Home and
+  Predictions and in each forecast's details, the big movers ranked by it.
+- *One, three and seven days* (2dbce5c). A separate daily forecast, made a little after each UTC day opens from
+  binance.com's daily bars, gives each coin's expected move and 80% range; Predictions lists the next days, Home's
+  Bitcoin today says Bitcoin's. Each horizon is judged once when its days are up and counted on the board.
+- *The AI's way, tested forward* (ea98c76, ee9d589). A seventh AI addition, off until switched on under Settings › AI:
+  once a UTC day from 00:05, while the watch is on, the deciding model is asked which way each of ten coins -- the
+  forecast's ten most traded when it first asks, kept -- will close a day on, shown their last thirty daily closes,
+  the size the forecast expects and the latest headlines. One call a day, its own dollar a day checked before it asks,
+  every answer recorded as the source 'ai-daily' and scored like every source. Nothing trades on it.
+- *The board kept through a quit and a crash* (d08d1eb). The board lost up to its last minute of counts at every quit,
+  and a quit halfway through its first reading of the days before left a part taken for the whole at the next start.
+  It is now written at once as the app quits, and a start after a crash counts from the record, once, what the lost
+  write left off. Found before the run counted anything; its first launch was stopped two and a half minutes in,
+  nothing asked.
+
+**The 30-day forward run (v10-fwd).** On a scratch profile, on the build of d08d1eb, its clock from 23:45:20 UTC on
+19 November to about 23:45 UTC on 19 December, then 25 hours to settle. OpenRouter is faked for every question but the
+daily direction test's: that one goes to the real model the user's settings give the deciding role,
+anthropic/claude-opus-5.5, with the user's key copied by name and never read, in a book of its own held under $30. The
+panel of V9's eight traders is followed on paper, carrying V9-COPY-FORWARD's record on. V10-FORWARD holds where, at an
+hour, four hours and a day, the middle is above nought on 45% to 55% of forecasts, the 80% range covers 75% to 85% with
+each tail 7% to 13% pooled and after Bitcoin rose or fell over the day before, and the size ratio is 0.85 to 1.15; the
+daily forecast is written on 90% of the days the app was up and 95% of its due predictions judged; and the board's
+counts equal the records'. research/v10Forward.ts reads it (1e29f6b); on the V9 run's records it finds the old lean, the
+middle above nought on 0% of 8,903 day forecasts.
+
+Its first two calls, at 23:53 UTC on 19 November and 00:08 UTC on 20 November, cost $0.0194 each: about 3,450
+tokens in and 282 out, answered in about seven seconds. Both called all ten coins down, at 51% to 56%. V10-AI-FORWARD holds only
+where the calls are right more often than not on the rises and on the falls alike, with the interval's lower bound
+above 50%, and at least a quarter of them go each way: a model that keeps calling one way fails it, as a lean should.
+The two first calls cover nearly the same day, the first having come when the run began. Thirty days can show only a
+model right about 65% of the time or more, so a miss reads "not shown", not "no skill".
+
+**What V10 can say so far.** The forecast knows how far coins move, from five minutes to seven days, and now shows that
+as its prediction. It does not know which way, and it no longer pretends to: the day's lean was its calibration
+following the last day, and it is gone. No coin's own trend gives its way at one to seven days. Which coins do better
+than the others week to week has a small edge that held on years it had not read, kept here and not shown as a way. The
+AI's calls on file read as chance, and its forward test is counting.
