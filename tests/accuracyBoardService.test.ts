@@ -236,6 +236,8 @@ describe('the accuracy board, kept through a quit and a crash (V10 Stage 8)', ()
     service.flushAccuracyBoardSync()
     expect(existsSync(join(dir, 'accuracy-board.json'))).toBe(false)
     expect(await day(service)).toBe(30_001)
+    // Written once the reading is done: the board says so a moment before its write lands.
+    for (let tries = 0; tries < 200 && !existsSync(join(dir, 'accuracy-board.json')); tries++) await new Promise((resolve) => setTimeout(resolve, 10))
     expect(kept(dir).days.filter((entry) => entry.h === 'hours24').reduce((sum, entry) => sum + entry.tally.n, 0)).toBe(30_001)
   })
 })
