@@ -2318,8 +2318,6 @@
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "该 OKX 链接中没有带单员代码（十六位字母和数字，或十八位数字）。",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "只从 Hyperliquid 和 OKX 读取交易员：请粘贴 Hyperliquid 地址或 OKX 带单员的主页链接。",
   "The baseline on paper": "模拟基准策略",
-  "The announcement reader stopped": "公告读取器已停止",
-  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "连续三次读取币安公告列表失败（{error}）：读取器已关闭，直到在“设置 › 市场”中重新打开。",
   "{asset} price": "{asset} 价格",
   "24h change": "24 小时涨跌",
   "24h high": "24 小时最高价",
@@ -2431,11 +2429,9 @@
   "Session orders": "本次会话的订单",
   "No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange.": "本次会话尚未下过模拟订单。这里的订单不会被保存，也不会发送到你的交易所。",
   "This list is cleared when you leave the page — it isn't saved, isn't sent to any exchange, and doesn't feed your Portfolio or Positions.": "离开此页面时，这份列表会被清空——它不会被保存，不会发送到任何交易所，也不会计入你的“投资组合”或“持仓”。",
-  "Binance's announcements: the reader stopped itself at {time} after {count} reads in a row read nothing ({reason}). Switch it on again under Settings › Market.": "币安公告：读取器在 {time} 自行停止，此前连续 {count} 次读取都没有读到内容（{reason}）。请在“设置 › 市场”中重新打开。",
   "Binance's announcements: not being read.": "币安公告：未在读取。",
   "Binance's announcements: not read yet.": "币安公告：尚未读取。",
   "Binance's announcements: last read {ago} ago.": "币安公告：上次读取在 {ago}前。",
-  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it stops itself.": "币安公告：上次读取在 {ago}前，已连续 {count} 次没有读到内容（{error}）；达到 {stop} 次时它会自行停止。",
   "Binance's announcements: last read {ago} ago, in part ({error}).": "币安公告：上次读取在 {ago}前，只读到一部分（{error}）。",
   "{switch}: already on.": "{switch}：已经开启。",
   "{switch}: switched on.": "{switch}：将被打开。",
@@ -2577,5 +2573,11 @@
   "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "还没有每日预测：每天 00:00 UTC 开盘后不久生成。",
   "Made {when}, from the day's open.": "{when}生成，基于当日开盘。",
   "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "自今日开盘起任一方向的预期变动：1 天 ±{day1}，3 天 ±{days3}，7 天 ±{days7}。",
-  "The AI daily direction test": "AI 每日方向测试"
+  "The AI daily direction test": "AI 每日方向测试",
+  "The announcement reader cannot read": "公告读取器无法读取",
+  "The announcement reader reads again": "公告读取器已恢复读取",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader tries again every five minutes by itself, and says so when it reads again.": "连续三次读取 Binance 公告列表失败（{error}）：读取器每五分钟自动重试一次，恢复读取时会告知。",
+  "Binance's announcement lists were read again, {count} minutes after the reader paused: it reads every minute again.": "读取器暂停 {count} 分钟后，已重新读取 Binance 公告列表：此后恢复每分钟读取一次。",
+  "Binance's announcements: paused since {time}, after {count} reads in a row read nothing ({reason}); the reader tries again every five minutes by itself.": "Binance 公告：连续 {count} 次未读取到任何内容（{reason}），自 {time} 起暂停；读取器每五分钟自动重试一次。",
+  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it pauses and tries again every five minutes.": "Binance 公告：上次读取于 {ago}前，已连续 {count} 次未读取到任何内容（{error}）；达到 {stop} 次时将暂停，并每五分钟重试一次。"
 }

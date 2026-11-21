@@ -2318,8 +2318,6 @@
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "Liên kết OKX đó không chứa mã nhà giao dịch dẫn dắt nào (mười sáu chữ cái và chữ số, hoặc mười tám chữ số).",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "Chỉ đọc nhà giao dịch từ Hyperliquid và OKX: hãy dán một địa chỉ Hyperliquid hoặc liên kết trang hồ sơ của một nhà giao dịch dẫn dắt OKX.",
   "The baseline on paper": "Chiến lược đối chứng mô phỏng",
-  "The announcement reader stopped": "Trình đọc thông báo đã dừng",
-  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "Ba lần đọc liên tiếp danh sách thông báo của Binance đều thất bại ({error}): trình đọc bị tắt cho đến khi được bật lại trong Cài đặt › Thị trường.",
   "{asset} price": "Giá {asset}",
   "24h change": "Thay đổi 24 giờ",
   "24h high": "Cao nhất 24 giờ",
@@ -2431,11 +2429,9 @@
   "Session orders": "Lệnh trong phiên",
   "No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange.": "Chưa có lệnh mô phỏng nào được đặt trong phiên này. Các lệnh ở đây không được lưu lại hay gửi tới sàn của bạn.",
   "This list is cleared when you leave the page — it isn't saved, isn't sent to any exchange, and doesn't feed your Portfolio or Positions.": "Danh sách này bị xóa khi bạn rời khỏi trang — nó không được lưu, không được gửi tới sàn nào, và không cấp dữ liệu cho Danh mục hay Vị thế của bạn.",
-  "Binance's announcements: the reader stopped itself at {time} after {count} reads in a row read nothing ({reason}). Switch it on again under Settings › Market.": "Thông báo của Binance: trình đọc đã tự dừng lúc {time} sau {count} lần đọc liên tiếp không đọc được gì ({reason}). Hãy bật lại trong Cài đặt › Thị trường.",
   "Binance's announcements: not being read.": "Thông báo của Binance: không được đọc.",
   "Binance's announcements: not read yet.": "Thông báo của Binance: chưa được đọc.",
   "Binance's announcements: last read {ago} ago.": "Thông báo của Binance: đọc lần gần nhất cách đây {ago}.",
-  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it stops itself.": "Thông báo của Binance: đọc lần gần nhất cách đây {ago}, đã {count} lần liên tiếp không đọc được gì ({error}); khi đạt {stop} lần, nó sẽ tự dừng.",
   "Binance's announcements: last read {ago} ago, in part ({error}).": "Thông báo của Binance: đọc lần gần nhất cách đây {ago}, chỉ đọc được một phần ({error}).",
   "{switch}: already on.": "{switch}: đã bật sẵn.",
   "{switch}: switched on.": "{switch}: được bật.",
@@ -2577,5 +2573,11 @@
   "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "Chưa có dự báo theo ngày: dự báo được tạo ngay sau khi mỗi ngày bắt đầu lúc 00:00 UTC.",
   "Made {when}, from the day's open.": "Tạo lúc {when}, từ giá mở cửa của ngày.",
   "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "Biến động dự kiến theo hướng bất kỳ từ giá mở cửa hôm nay: ±{day1} trong một ngày, ±{days3} trong ba ngày, ±{days7} trong bảy ngày.",
-  "The AI daily direction test": "Bài thử hướng hằng ngày của AI"
+  "The AI daily direction test": "Bài thử hướng hằng ngày của AI",
+  "The announcement reader cannot read": "Trình đọc thông báo không đọc được",
+  "The announcement reader reads again": "Trình đọc thông báo đọc lại được",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader tries again every five minutes by itself, and says so when it reads again.": "Ba lần đọc liên tiếp danh sách thông báo của Binance đều thất bại ({error}): trình đọc tự thử lại mỗi năm phút và sẽ báo khi đọc lại được.",
+  "Binance's announcement lists were read again, {count} minutes after the reader paused: it reads every minute again.": "Đã đọc lại được danh sách thông báo của Binance, {count} phút sau khi trình đọc tạm dừng: từ giờ lại đọc mỗi phút.",
+  "Binance's announcements: paused since {time}, after {count} reads in a row read nothing ({reason}); the reader tries again every five minutes by itself.": "Thông báo của Binance: tạm dừng từ {time}, sau {count} lần đọc liên tiếp không đọc được gì ({reason}); trình đọc tự thử lại mỗi năm phút.",
+  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it pauses and tries again every five minutes.": "Thông báo của Binance: lần đọc cuối cách đây {ago}, {count} lần liên tiếp không đọc được gì ({error}); đến {stop} lần, trình đọc sẽ tạm dừng và thử lại mỗi năm phút."
 }

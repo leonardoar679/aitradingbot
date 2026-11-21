@@ -27,19 +27,19 @@ const since = (i18n: I18n, sec: number, nowSec: number): string => durationOf(i1
 export function readerLine(state: Pick<PaperTestingState, 'reader' | 'switches'>, nowSec: number, i18n: I18n): string {
   const { t } = i18n
   const { health, lastReadAt, error } = state.reader
-  if (health.stoppedAt !== null) {
-    return t("Binance's announcements: the reader stopped itself at {time} after {count} reads in a row read nothing ({reason}). Switch it on again under Settings › Market.", {
-      time: utcWhen(i18n, health.stoppedAt * 1000),
+  if (!state.switches['news.enabled']) return t("Binance's announcements: not being read.")
+  if (health.pausedAt !== null) {
+    return t("Binance's announcements: paused since {time}, after {count} reads in a row read nothing ({reason}); the reader tries again every five minutes by itself.", {
+      time: utcWhen(i18n, health.pausedAt * 1000),
       count: NEWS_READER_FAILURES_TO_STOP,
-      reason: health.stoppedReason ?? t('no reason given')
+      reason: health.pausedReason ?? t('no reason given')
     })
   }
-  if (!state.switches['news.enabled']) return t("Binance's announcements: not being read.")
   if (lastReadAt === null) return t("Binance's announcements: not read yet.")
   const ago = since(i18n, lastReadAt, nowSec)
   if (error === null) return t("Binance's announcements: last read {ago} ago.", { ago })
   return health.failuresInRow > 0
-    ? t("Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it stops itself.", { ago, count: health.failuresInRow, error, stop: NEWS_READER_FAILURES_TO_STOP })
+    ? t("Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it pauses and tries again every five minutes.", { ago, count: health.failuresInRow, error, stop: NEWS_READER_FAILURES_TO_STOP })
     : t("Binance's announcements: last read {ago} ago, in part ({error}).", { ago, error })
 }
 

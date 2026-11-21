@@ -2318,8 +2318,6 @@
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "その OKX のリンクにはリードトレーダーのコード（英数字16文字、または数字18桁）が含まれていません。",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "トレーダーは Hyperliquid と OKX からのみ読み取ります：Hyperliquid のアドレスか、OKX のリードトレーダーのプロフィールリンクを貼り付けてください。",
   "The baseline on paper": "ペーパーでのベースライン戦略",
-  "The announcement reader stopped": "発表リーダーが停止しました",
-  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "Binance の発表一覧の読み込みが3回続けて失敗しました（{error}）。「設定 › マーケット」で再びオンにするまで、リーダーはオフになります。",
   "{asset} price": "{asset} の価格",
   "24h change": "24時間の変動",
   "24h high": "24時間高値",
@@ -2431,11 +2429,9 @@
   "Session orders": "このセッションの注文",
   "No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange.": "このセッションでは、まだペーパー注文を出していません。ここでの注文は保存されず、お使いの取引所にも送信されません。",
   "This list is cleared when you leave the page — it isn't saved, isn't sent to any exchange, and doesn't feed your Portfolio or Positions.": "この一覧はページを離れると消去されます。保存されず、どの取引所にも送信されず、「ポートフォリオ」や「ポジション」にも反映されません。",
-  "Binance's announcements: the reader stopped itself at {time} after {count} reads in a row read nothing ({reason}). Switch it on again under Settings › Market.": "Binance の発表：{count} 回続けて何も読み取れなかったため（{reason}）、発表リーダーは {time} に自動で停止しました。「設定 › マーケット」で再びオンにしてください。",
   "Binance's announcements: not being read.": "Binance の発表：読み取っていません。",
   "Binance's announcements: not read yet.": "Binance の発表：まだ読み取っていません。",
   "Binance's announcements: last read {ago} ago.": "Binance の発表：最後の読み取りは {ago}前です。",
-  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it stops itself.": "Binance の発表：最後の読み取りは {ago}前。{count} 回続けて何も読み取れていません（{error}）。{stop} 回に達すると自動的に停止します。",
   "Binance's announcements: last read {ago} ago, in part ({error}).": "Binance の発表：最後の読み取りは {ago}前で、一部しか読み取れませんでした（{error}）。",
   "{switch}: already on.": "{switch}：すでにオンです。",
   "{switch}: switched on.": "{switch}：オンにします。",
@@ -2577,5 +2573,11 @@
   "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "日次の予測はまだありません：毎日00:00 UTCに日が始まった少し後に作成されます。",
   "Made {when}, from the day's open.": "{when}に、その日の始値から作成。",
   "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "本日の始値からどちらの方向にも予想される変動幅：1日で ±{day1}、3日で ±{days3}、7日で ±{days7}。",
-  "The AI daily direction test": "AIの日次方向テスト"
+  "The AI daily direction test": "AIの日次方向テスト",
+  "The announcement reader cannot read": "発表リーダーが読み取れません",
+  "The announcement reader reads again": "発表リーダーが再び読み取っています",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader tries again every five minutes by itself, and says so when it reads again.": "Binance の発表一覧の読み込みが3回続けて失敗しました（{error}）。リーダーは5分ごとに自動で再試行し、再び読み取れたらお知らせします。",
+  "Binance's announcement lists were read again, {count} minutes after the reader paused: it reads every minute again.": "発表リーダーが一時停止してから {count} 分後、Binance の発表一覧を再び読み取りました。これからは再び毎分読み取ります。",
+  "Binance's announcements: paused since {time}, after {count} reads in a row read nothing ({reason}); the reader tries again every five minutes by itself.": "Binance の発表：{count} 回続けて何も読み取れなかったため（{reason}）、{time} から一時停止しています。リーダーは5分ごとに自動で再試行します。",
+  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it pauses and tries again every five minutes.": "Binance の発表：最後の読み取りは {ago}前。{count} 回続けて何も読み取れていません（{error}）。{stop} 回に達すると一時停止し、5分ごとに再試行します。"
 }

@@ -322,7 +322,7 @@ describe('a delisting, or a tag, put to the models', () => {
 })
 
 describe('its health', () => {
-  it('switches itself off after three reads in a row that read nothing, says so, and counts again once switched on', async () => {
+  it('pauses after three reads in a row that read nothing, says so, tries again every five minutes, and is back by itself', async () => {
     // Its own minute's read never comes between the reads made here.
     vi.useFakeTimers()
     lists.failing = new Set([161, 48, 49])
@@ -330,31 +330,53 @@ describe('its health', () => {
     await setNewsConfig({ enabled: true })
     await whenNewsSettled()
     await readNewsOnce(T + 60_000)
-    expect((await getNewsState()).health).toEqual({ failuresInRow: 2, stoppedAt: null, stoppedReason: null })
+    expect((await getNewsState()).health).toEqual({ failuresInRow: 2, pausedAt: null, pausedReason: null })
     expect(told).toEqual([])
     await readNewsOnce(T + 120_000)
     const state = await getNewsState()
-    expect(state.config.enabled).toBe(false)
-    expect(state.nextReadAt).toBeNull()
-    expect(state.health).toMatchObject({ failuresInRow: 3, stoppedReason: expect.stringMatching(/^Binance's announcement lists could not be read: /) })
-    expect(state.health.stoppedAt).not.toBeNull()
-    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8')).enabled).toBe(false)
+    // Paused, not switched off (20 November 2026: a three-minute outage had switched it off for the rest of a run).
+    expect(state.config.enabled).toBe(true)
+    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8')).enabled).toBe(true)
+    expect(state.health).toMatchObject({ failuresInRow: 3, pausedReason: expect.stringMatching(/^Binance's announcement lists could not be read: /) })
+    expect(state.health.pausedAt).not.toBeNull()
     expect(told).toHaveLength(1)
-    expect(told[0].title).toBe('The announcement reader stopped')
-    expect(told[0].body).toMatch(/^Three reads in a row of Binance's announcement lists failed \(Binance's announcement lists could not be read: .+\): the reader is switched off until it is switched on again under Settings › Market\. Nothing was placed; what is open keeps its stops\.$/)
-    // Switched on again, it counts from nothing; and a read of part of the lists is not one that read nothing.
-    lists.failing = new Set([48])
-    expect((await setNewsConfig({ enabled: true })).health).toEqual({ failuresInRow: 0, stoppedAt: null, stoppedReason: null })
+    expect(told[0].title).toBe('The announcement reader cannot read')
+    expect(told[0].body).toMatch(/^Three reads in a row of Binance's announcement lists failed \(Binance's announcement lists could not be read: .+\): the reader tries again every five minutes by itself, and says so when it reads again\. Nothing was placed; what is open keeps its stops\.$/)
+    // Its own read at the minute still reads nothing: told once, and the next read five minutes on.
+    await vi.advanceTimersByTimeAsync(61_000)
     await whenNewsSettled()
-    expect((await getNewsState()).health).toEqual({ failuresInRow: 0, stoppedAt: null, stoppedReason: null })
-    await setNewsConfig({ enabled: false })
+    const waiting = await getNewsState()
+    expect(waiting.health.failuresInRow).toBe(4)
+    expect(told).toHaveLength(1)
+    expect((waiting.nextReadAt ?? 0) - (waiting.lastReadAt ?? 0)).toBeGreaterThanOrEqual(299)
+    expect((waiting.nextReadAt ?? 0) - (waiting.lastReadAt ?? 0)).toBeLessThanOrEqual(301)
+    // The lists answer again: back at the next try, with a silent notice, and every minute from then.
+    lists.failing = new Set()
+    await vi.advanceTimersByTimeAsync(301_000)
+    await whenNewsSettled()
+    const back = await getNewsState()
+    expect(back.health).toEqual({ failuresInRow: 0, pausedAt: null, pausedReason: null })
+    expect(told).toHaveLength(2)
+    expect(told[1].title).toBe('The announcement reader reads again')
+    expect(told[1].body).toMatch(/^Binance's announcement lists were read again, \d+ minutes after the reader paused: it reads every minute again\.$/)
+    expect((back.nextReadAt ?? 0) - (back.lastReadAt ?? 0)).toBeLessThanOrEqual(64)
+    // A read of part of the lists is not one that read nothing; and switched off by hand, it is off, not paused.
+    lists.failing = new Set([48])
+    await readNewsOnce(T + 600_000)
+    expect((await getNewsState()).health.failuresInRow).toBe(0)
+    lists.failing = new Set([161, 48, 49])
+    for (const at of [T + 660_000, T + 720_000, T + 780_000]) await readNewsOnce(at)
+    expect((await getNewsState()).health.pausedAt).not.toBeNull()
+    expect((await setNewsConfig({ enabled: false })).health).toMatchObject({ pausedAt: null, pausedReason: null })
+    expect((await getNewsState()).nextReadAt).toBeNull()
+    vi.useRealTimers()
   })
 
   it('stops nothing while it is off, however often a read reads nothing', async () => {
     lists.failing = new Set([161, 48, 49])
     const { readNewsOnce, getNewsState } = await reader()
     for (const at of [T, T + 60_000, T + 120_000, T + 180_000]) await readNewsOnce(at)
-    expect((await getNewsState()).health).toEqual({ failuresInRow: 4, stoppedAt: null, stoppedReason: null })
+    expect((await getNewsState()).health).toEqual({ failuresInRow: 4, pausedAt: null, pausedReason: null })
     expect(told).toEqual([])
     // A read of any list is not one that read nothing: the count starts again.
     lists.failing = new Set([48])

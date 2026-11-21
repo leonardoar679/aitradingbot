@@ -2318,8 +2318,6 @@
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "उस OKX लिंक में किसी लीड ट्रेडर का कोड नहीं है (सोलह अक्षर व अंक, या अठारह अंक)।",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "ट्रेडर केवल Hyperliquid और OKX से पढ़े जाते हैं: एक Hyperliquid पता या किसी OKX लीड ट्रेडर का प्रोफ़ाइल लिंक चिपकाएँ।",
   "The baseline on paper": "पेपर पर बेसलाइन रणनीति",
-  "The announcement reader stopped": "घोषणा रीडर रुक गया",
-  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "Binance की घोषणा सूचियों को लगातार तीन बार पढ़ना विफल रहा ({error}): रीडर बंद कर दिया गया है, जब तक इसे सेटिंग्स › बाज़ार में फिर से चालू न किया जाए।",
   "{asset} price": "{asset} की कीमत",
   "24h change": "24 घंटे में बदलाव",
   "24h high": "24 घंटे का उच्चतम",
@@ -2431,11 +2429,9 @@
   "Session orders": "इस सत्र के ऑर्डर",
   "No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange.": "इस सत्र में अभी कोई पेपर ऑर्डर नहीं लगाया गया। यहाँ के ऑर्डर सहेजे नहीं जाते और आपके एक्सचेंज को भेजे नहीं जाते।",
   "This list is cleared when you leave the page — it isn't saved, isn't sent to any exchange, and doesn't feed your Portfolio or Positions.": "पेज छोड़ने पर यह सूची साफ़ हो जाती है — यह सहेजी नहीं जाती, किसी एक्सचेंज को भेजी नहीं जाती, और आपके पोर्टफोलियो या पोज़िशन में कुछ नहीं जोड़ती।",
-  "Binance's announcements: the reader stopped itself at {time} after {count} reads in a row read nothing ({reason}). Switch it on again under Settings › Market.": "Binance की घोषणाएँ: रीडर {time} पर अपने आप रुक गया, क्योंकि लगातार {count} बार पढ़ने पर कुछ भी नहीं पढ़ा जा सका ({reason})। इसे सेटिंग्स › बाज़ार में फिर से चालू करें।",
   "Binance's announcements: not being read.": "Binance की घोषणाएँ: पढ़ी नहीं जा रहीं।",
   "Binance's announcements: not read yet.": "Binance की घोषणाएँ: अभी पढ़ी नहीं गईं।",
   "Binance's announcements: last read {ago} ago.": "Binance की घोषणाएँ: आख़िरी बार {ago} पहले पढ़ी गईं।",
-  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it stops itself.": "Binance की घोषणाएँ: आख़िरी बार {ago} पहले पढ़ी गईं, लगातार {count} बार कुछ भी नहीं पढ़ा जा सका ({error}); {stop} बार होने पर यह अपने आप रुक जाता है।",
   "Binance's announcements: last read {ago} ago, in part ({error}).": "Binance की घोषणाएँ: आख़िरी बार {ago} पहले आंशिक रूप से पढ़ी गईं ({error})।",
   "{switch}: already on.": "{switch}: पहले से चालू।",
   "{switch}: switched on.": "{switch}: चालू किया जाएगा।",
@@ -2577,5 +2573,11 @@
   "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "अभी कोई दैनिक पूर्वानुमान नहीं: यह हर दिन 00:00 UTC पर खुलने के थोड़ी देर बाद बनता है।",
   "Made {when}, from the day's open.": "{when} बना, दिन के ओपन से।",
   "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "आज के ओपन से किसी भी दिशा में अनुमानित चाल: एक दिन में ±{day1}, तीन में ±{days3}, सात में ±{days7}।",
-  "The AI daily direction test": "AI की दैनिक दिशा जाँच"
+  "The AI daily direction test": "AI की दैनिक दिशा जाँच",
+  "The announcement reader cannot read": "घोषणा रीडर पढ़ नहीं पा रहा",
+  "The announcement reader reads again": "घोषणा रीडर फिर से पढ़ रहा है",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader tries again every five minutes by itself, and says so when it reads again.": "Binance की घोषणा सूचियों को लगातार तीन बार पढ़ना विफल रहा ({error}): रीडर हर पाँच मिनट में अपने आप फिर कोशिश करता है, और फिर से पढ़ पाने पर बताता है।",
+  "Binance's announcement lists were read again, {count} minutes after the reader paused: it reads every minute again.": "रीडर के रुकने के {count} मिनट बाद Binance की घोषणा सूचियाँ फिर से पढ़ी गईं: अब यह फिर से हर मिनट पढ़ता है।",
+  "Binance's announcements: paused since {time}, after {count} reads in a row read nothing ({reason}); the reader tries again every five minutes by itself.": "Binance की घोषणाएँ: {time} से रुकी हुई हैं, क्योंकि लगातार {count} बार कुछ भी नहीं पढ़ा गया ({reason}); रीडर हर पाँच मिनट में अपने आप फिर कोशिश करता है।",
+  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it pauses and tries again every five minutes.": "Binance की घोषणाएँ: आख़िरी बार {ago} पहले पढ़ी गईं, लगातार {count} बार कुछ भी नहीं पढ़ा गया ({error}); {stop} पर यह रुककर हर पाँच मिनट में फिर कोशिश करता है।"
 }

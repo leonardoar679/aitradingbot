@@ -181,15 +181,18 @@ export function applyNewsConfigPatch(current: NewsConfig, patch: NewsConfigPatch
   return next
 }
 
-/** Reads in a row that read none of Binance's lists, after which the reader is switched off with a notice (V8 Stage 9:
- * the reader's health is shown, and three failures stop it). */
+/** Reads in a row that read none of Binance's lists, after which the reader pauses with a notice (V8 Stage 9: the
+ * reader's health is shown, and three failures stop it; since 20 November 2026, at the user's answer, it is no longer
+ * switched off by them: it tries again every NEWS_READER_RETRY_MS by itself, and says so when it reads again). */
 export const NEWS_READER_FAILURES_TO_STOP = 3
+/** How often a paused reader tries again (a reader that reads goes back to every minute). */
+export const NEWS_READER_RETRY_MS = 5 * 60_000
 
-/** How the reader has been reading: the reads in a row that read nothing, and when and why it stopped itself. */
+/** How the reader has been reading: the reads in a row that read nothing, and since when and why it is paused. */
 export interface NewsReaderHealth {
   failuresInRow: number
-  stoppedAt: number | null
-  stoppedReason: string | null
+  pausedAt: number | null
+  pausedReason: string | null
 }
 
 export interface NewsState {

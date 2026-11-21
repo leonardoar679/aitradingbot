@@ -6,6 +6,7 @@ import { readConfigFile } from './configFiles'
 import {
   NEWS_CATALOGS,
   NEWS_READER_FAILURES_TO_STOP,
+  NEWS_READER_RETRY_MS,
   applyNewsConfigPatch,
   byNewestRelease,
   copyNewsConfig,
@@ -26,7 +27,7 @@ import {
   type NewsState
 } from '../../shared/news'
 import { shouldRaiseNewsEvent } from '../../shared/newsActions'
-import { systemFailureNotice } from '../../shared/notices'
+import { systemFailureNotice, systemRecoveredNotice } from '../../shared/notices'
 import { writeJsonAtomic } from './atomicWrite'
 import { appendJsonLine, listMonthFiles } from './jsonlStore'
 import { raiseNewsEvent } from './marketScannerService'
@@ -70,8 +71,9 @@ let error: string | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
 let readInFlight = false
 let failuresInRow = 0
-let stopped: { at: number; reason: string } | null = null
-/** The read started by switching the reader on, which nothing waits for. */
+/** Paused after reads in a row that read nothing: it tries again every NEWS_READER_RETRY_MS until one reads. */
+let paused: { at: number; reason: string } | null = null
+/** The latest read nothing waits for: the one switching the reader on starts, or its own on the minute. */
 let background: Promise<unknown> = Promise.resolve()
 const listeners = new Set<(state: NewsState) => void>()
 
@@ -97,7 +99,7 @@ async function persistConfig(): Promise<void> {
 }
 
 function snapshot(current: NewsConfig): NewsState {
-  return { config: copyNewsConfig(current), lastReadAt, nextReadAt, error, recent: [...recent], health: { failuresInRow, stoppedAt: stopped?.at ?? null, stoppedReason: stopped?.reason ?? null } }
+  return { config: copyNewsConfig(current), lastReadAt, nextReadAt, error, recent: [...recent], health: { failuresInRow, pausedAt: paused?.at ?? null, pausedReason: paused?.reason ?? null } }
 }
 
 function notify(current: NewsConfig): void {
@@ -199,24 +201,38 @@ export async function readNewsOnce(nowMs: number = Date.now()): Promise<NewsStat
     lastReadAt = Math.floor(Date.now() / 1000)
   }
   failuresInRow = readNothing ? failuresInRow + 1 : 0
-  // Three reads in a row of nothing, while it is on: it switches itself off and says why.
-  if (readNothing && failuresInRow >= NEWS_READER_FAILURES_TO_STOP && (config ?? current).enabled) await stopForFailures(error ?? 'nothing could be read')
+  // Three reads in a row of nothing, while it is on: it pauses, says why, and tries again by itself (it was switched off
+  // until 20 November 2026, when a three-minute outage stopped it for the rest of a 30-day run). A read that reads: back.
+  if (readNothing && failuresInRow >= NEWS_READER_FAILURES_TO_STOP && (config ?? current).enabled && paused === null) pauseForFailures(error ?? 'nothing could be read')
+  if (!readNothing && paused !== null) resumeAfterFailures()
   // The setting as it is now: it may have been changed while the lists were being read.
   const latest = config ?? current
   notify(latest)
   return snapshot(latest)
 }
 
-/** The reader switched off after reads in a row that read nothing, with a notice that says so. */
-async function stopForFailures(reason: string): Promise<void> {
-  config = { ...copyNewsConfig(await loadConfig()), enabled: false }
-  await persistConfig()
-  unschedule()
-  stopped = { at: Math.floor(Date.now() / 1000), reason }
+/** The reader paused after reads in a row that read nothing, with a notice that says so: its switch is left as it is, and
+ * it tries again every NEWS_READER_RETRY_MS (the next read is scheduled so). */
+function pauseForFailures(reason: string): void {
+  paused = { at: Math.floor(Date.now() / 1000), reason }
   tell((i18n) =>
     systemFailureNotice(
       'announcements',
-      i18n.t("Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.", { error: reason }),
+      i18n.t("Three reads in a row of Binance's announcement lists failed ({error}): the reader tries again every five minutes by itself, and says so when it reads again.", { error: reason }),
+      i18n
+    )
+  )
+}
+
+/** A paused reader that reads again: back to every minute, with a notice that says so. */
+function resumeAfterFailures(): void {
+  const since = paused?.at ?? Math.floor(Date.now() / 1000)
+  paused = null
+  const minutes = Math.max(1, Math.round((Date.now() / 1000 - since) / 60))
+  tell((i18n) =>
+    systemRecoveredNotice(
+      'announcements',
+      i18n.t("Binance's announcement lists were read again, {count} minutes after the reader paused: it reads every minute again.", { count: minutes }),
       i18n
     )
   )
@@ -224,11 +240,11 @@ async function stopForFailures(reason: string): Promise<void> {
 
 function schedule(): void {
   if (timer !== null) return
-  const delay = nextNewsReadDelayMs(Date.now())
+  const delay = paused === null ? nextNewsReadDelayMs(Date.now()) : NEWS_READER_RETRY_MS
   nextReadAt = Math.floor((Date.now() + delay) / 1000)
   timer = setTimeout(() => {
     timer = null
-    void readNewsOnce()
+    background = readNewsOnce()
       .catch((failure) => console.error('Reading the news failed:', failure))
       .finally(() => {
         // Read again rather than captured: the reader may have been switched off mid-read.
@@ -263,11 +279,9 @@ export async function setNewsConfig(patch: NewsConfigPatch): Promise<NewsState> 
   config = next
   const current = next
   const switchedOn = current.enabled && timer === null
-  // Switched on again, it counts its failures from nothing.
-  if (current.enabled) {
-    failuresInRow = 0
-    stopped = null
-  }
+  // Switched on again, it counts its failures from nothing; switched off, it is no longer paused but off.
+  failuresInRow = current.enabled ? 0 : failuresInRow
+  paused = null
   await persistConfig()
   if (current.enabled) schedule()
   else unschedule()
@@ -278,7 +292,7 @@ export async function setNewsConfig(patch: NewsConfigPatch): Promise<NewsState> 
   return snapshot(current)
 }
 
-/** Test seam: resolves once the read that switching on started has finished. */
+/** Test seam: resolves once the latest read nothing waits for (switching on started it, or the minute) has finished. */
 export async function whenNewsSettled(): Promise<void> {
   await background
 }

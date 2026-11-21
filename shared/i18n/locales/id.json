@@ -2318,8 +2318,6 @@
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "Tautan OKX itu tidak menyebut kode lead trader (enam belas huruf dan angka, atau delapan belas angka).",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "Trader hanya dibaca dari Hyperliquid dan OKX: tempel alamat Hyperliquid atau tautan profil lead trader OKX.",
   "The baseline on paper": "Strategi pembanding simulasi",
-  "The announcement reader stopped": "Pembaca pengumuman berhenti",
-  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "Tiga kali berturut-turut daftar pengumuman Binance gagal dibaca ({error}): pembaca dimatikan sampai dinyalakan lagi di Pengaturan › Pasar.",
   "{asset} price": "Harga {asset}",
   "24h change": "Perubahan 24 jam",
   "24h high": "Tertinggi 24 jam",
@@ -2431,11 +2429,9 @@
   "Session orders": "Order sesi ini",
   "No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange.": "Belum ada order simulasi yang ditempatkan di sesi ini. Order di sini tidak disimpan dan tidak dikirim ke bursa Anda.",
   "This list is cleared when you leave the page — it isn't saved, isn't sent to any exchange, and doesn't feed your Portfolio or Positions.": "Daftar ini dikosongkan saat Anda meninggalkan halaman — tidak disimpan, tidak dikirim ke bursa mana pun, dan tidak dihitung di Portofolio atau Posisi Anda.",
-  "Binance's announcements: the reader stopped itself at {time} after {count} reads in a row read nothing ({reason}). Switch it on again under Settings › Market.": "Pengumuman Binance: pembaca berhenti sendiri pada {time} setelah {count} pembacaan berturut-turut tidak mendapat apa pun ({reason}). Nyalakan lagi di Pengaturan › Pasar.",
   "Binance's announcements: not being read.": "Pengumuman Binance: tidak sedang dibaca.",
   "Binance's announcements: not read yet.": "Pengumuman Binance: belum dibaca.",
   "Binance's announcements: last read {ago} ago.": "Pengumuman Binance: terakhir dibaca {ago} yang lalu.",
-  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it stops itself.": "Pengumuman Binance: terakhir dibaca {ago} yang lalu, tidak mendapat apa pun {count} kali berturut-turut ({error}); pada {stop} kali ia berhenti sendiri.",
   "Binance's announcements: last read {ago} ago, in part ({error}).": "Pengumuman Binance: terakhir dibaca {ago} yang lalu, sebagian ({error}).",
   "{switch}: already on.": "{switch}: sudah menyala.",
   "{switch}: switched on.": "{switch}: dinyalakan.",
@@ -2577,5 +2573,11 @@
   "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "Belum ada prakiraan harian: dibuat sesaat setelah setiap hari dibuka pada 00:00 UTC.",
   "Made {when}, from the day's open.": "Dibuat {when}, dari pembukaan hari ini.",
   "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "Gerak yang diperkirakan ke arah mana pun dari pembukaan hari ini: ±{day1} dalam sehari, ±{days3} dalam tiga, ±{days7} dalam tujuh.",
-  "The AI daily direction test": "Uji arah harian AI"
+  "The AI daily direction test": "Uji arah harian AI",
+  "The announcement reader cannot read": "Pembaca pengumuman tidak dapat membaca",
+  "The announcement reader reads again": "Pembaca pengumuman membaca lagi",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader tries again every five minutes by itself, and says so when it reads again.": "Tiga kali berturut-turut daftar pengumuman Binance gagal dibaca ({error}): pembaca mencoba lagi sendiri setiap lima menit, dan memberi tahu saat bisa membaca lagi.",
+  "Binance's announcement lists were read again, {count} minutes after the reader paused: it reads every minute again.": "Daftar pengumuman Binance terbaca lagi, {count} menit setelah pembaca berhenti sementara: kini membaca setiap menit lagi.",
+  "Binance's announcements: paused since {time}, after {count} reads in a row read nothing ({reason}); the reader tries again every five minutes by itself.": "Pengumuman Binance: dijeda sejak {time}, setelah {count} kali berturut-turut tidak terbaca apa pun ({reason}); pembaca mencoba lagi sendiri setiap lima menit.",
+  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it pauses and tries again every five minutes.": "Pengumuman Binance: terakhir dibaca {ago} lalu, {count} kali berturut-turut tidak terbaca apa pun ({error}); pada {stop} kali, pembaca berhenti sementara dan mencoba lagi setiap lima menit."
 }

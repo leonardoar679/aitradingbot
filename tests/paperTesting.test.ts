@@ -38,7 +38,7 @@ describe('the switches Start turns on', () => {
   it("are put back exactly by Stop's patch, whatever they were changed to since, and nothing else is", () => {
     const before = patched(DEFAULT_NEWS_CONFIG, { monitoringTag: { paperShort: { enabled: true } } })
     const switched = switchesToTurnOn(before)
-    // Changed during the run: the reader stopped itself, and the delisting's models were switched off by hand.
+    // Changed during the run: the reader and the delisting's models were switched off by hand.
     const during = patched(patched(before, startPatchOf(switched)), { enabled: false, delisting: { askModels: false } })
     const after = patched(during, restorePatchOf(switched))
     expect(switchStateOf(after)).toEqual({ 'news.enabled': false, 'news.delisting.paperShort': false, 'news.delisting.askModels': false })
@@ -76,7 +76,7 @@ const state = (over: Partial<PaperTestingState> = {}): PaperTestingState => ({
   standings: [standing('news'), standing('copy'), standing('baseline')],
   switches: { 'news.enabled': false, 'news.delisting.paperShort': false, 'news.delisting.askModels': true },
   tagShort: false,
-  reader: { lastReadAt: null, error: null, health: { failuresInRow: 0, stoppedAt: null, stoppedReason: null } },
+  reader: { lastReadAt: null, error: null, health: { failuresInRow: 0, pausedAt: null, pausedReason: null } },
   follows: 2,
   clones: 1,
   ...over
@@ -108,7 +108,7 @@ describe('the Paper testing card', () => {
       started: { v: PAPER_TESTING_VERSION, startedAt: NOW - 7200, switched: [{ switch: 'news.enabled', was: false }] },
       standings: [standing('news', { open: 1, equity: 10_012.5 }), standing('copy', { equity: null }), standing('baseline', { open: 2 })],
       switches: { 'news.enabled': true, 'news.delisting.paperShort': true, 'news.delisting.askModels': true },
-      reader: { lastReadAt: NOW - 20, error: null, health: { failuresInRow: 0, stoppedAt: null, stoppedReason: null } }
+      reader: { lastReadAt: NOW - 20, error: null, health: { failuresInRow: 0, pausedAt: null, pausedReason: null } }
     })
     const html = draw({ state: running })
     expect(html).toContain('Running since 26 Oct 08:20 UTC (2.0 h).')
@@ -129,16 +129,18 @@ describe('the Paper testing card', () => {
     expect(pending).not.toContain('>Start paper testing<')
   })
 
-  it("says the reader's health: reading, reading nothing so many times in a row, or stopped by itself", () => {
+  it("says the reader's health: reading, reading nothing so many times in a row, or paused and trying again", () => {
     const on = { 'news.enabled': true, 'news.delisting.paperShort': true, 'news.delisting.askModels': true }
-    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 125, error: 'busy', health: { failuresInRow: 2, stoppedAt: null, stoppedReason: null } } }), NOW, ENGLISH)).toBe(
-      "Binance's announcements: last read 2 min ago, reading nothing 2 times in a row (busy); at 3 it stops itself."
+    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 125, error: 'busy', health: { failuresInRow: 2, pausedAt: null, pausedReason: null } } }), NOW, ENGLISH)).toBe(
+      "Binance's announcements: last read 2 min ago, reading nothing 2 times in a row (busy); at 3 it pauses and tries again every five minutes."
     )
-    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 65, error: 'busy', health: { failuresInRow: 1, stoppedAt: null, stoppedReason: null } } }), NOW, ENGLISH)).toBe(
-      "Binance's announcements: last read 1 min ago, reading nothing 1 time in a row (busy); at 3 it stops itself."
+    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 65, error: 'busy', health: { failuresInRow: 1, pausedAt: null, pausedReason: null } } }), NOW, ENGLISH)).toBe(
+      "Binance's announcements: last read 1 min ago, reading nothing 1 time in a row (busy); at 3 it pauses and tries again every five minutes."
     )
-    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 5, error: '1 of 3 lists', health: { failuresInRow: 0, stoppedAt: null, stoppedReason: null } } }), NOW, ENGLISH)).toBe("Binance's announcements: last read 5 s ago, in part (1 of 3 lists).")
-    expect(readerLine(state({ reader: { lastReadAt: NOW - 5, error: 'x', health: { failuresInRow: 3, stoppedAt: NOW - 60, stoppedReason: 'answered 451' } } }), NOW, ENGLISH)).toMatch(/stopped itself at .* after 3 reads in a row read nothing \(answered 451\)/)
+    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 5, error: '1 of 3 lists', health: { failuresInRow: 0, pausedAt: null, pausedReason: null } } }), NOW, ENGLISH)).toBe("Binance's announcements: last read 5 s ago, in part (1 of 3 lists).")
+    const paused = { lastReadAt: NOW - 5, error: 'x', health: { failuresInRow: 3, pausedAt: NOW - 60, pausedReason: 'answered 451' } }
+    expect(readerLine(state({ switches: on, reader: paused }), NOW, ENGLISH)).toMatch(/^Binance's announcements: paused since .* after 3 reads in a row read nothing \(answered 451\); the reader tries again every five minutes by itself\.$/)
+    expect(readerLine(state({ reader: paused }), NOW, ENGLISH)).toBe("Binance's announcements: not being read.")
     expect(readerLine(state(), NOW, ENGLISH)).toBe("Binance's announcements: not being read.")
     expect(readerLine(state({ switches: on }), NOW, ENGLISH)).toBe("Binance's announcements: not read yet.")
   })

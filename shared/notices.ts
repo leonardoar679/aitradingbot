@@ -185,17 +185,32 @@ const FAILURE_TITLES = {
   stream: msg('The live stream is dead'),
   feed: msg('The news feeds cannot be read'),
   'ai-key': msg('The OpenRouter key was rejected'),
-  announcements: msg('The announcement reader stopped')
+  announcements: msg('The announcement reader cannot read')
 }
 
 /** Something the app runs on has failed: the scanner, the stream, the feeds, the AI key; and since V8 Stage 9 the
- * reader of Binance's announcements, stopped after reads in a row that read nothing. `detail` is said in the notice's
+ * reader of Binance's announcements, paused after reads in a row that read nothing. `detail` is said in the notice's
  * language by its caller. */
 export function systemFailureNotice(what: 'scanner' | 'stream' | 'feed' | 'ai-key' | 'announcements', detail: string, { t }: I18n = ENGLISH): Notice {
   return {
     title: t(FAILURE_TITLES[what]),
     body: t('{detail} Nothing was placed; what is open keeps its stops.', { detail }),
     extra: { kind: 'SYSTEM_FAILURE', thread: what, severity: 'high', threadSeconds: 3600 }
+  }
+}
+
+const RECOVERED_TITLES = {
+  announcements: msg('The announcement reader reads again')
+}
+
+/** A reader that had failed reads again by itself (since 20 November 2026: Binance's announcement reader, paused after
+ * reads in a row that read nothing, tries again and is back). Silent, on a thread of its own so that the failure's thread
+ * does not fold it. `detail` is said in the notice's language by its caller. */
+export function systemRecoveredNotice(what: 'announcements', detail: string, { t }: I18n = ENGLISH): Notice {
+  return {
+    title: t(RECOVERED_TITLES[what]),
+    body: detail,
+    extra: { kind: 'SYSTEM_FAILURE', thread: `${what}-ok`, severity: 'watch', threadSeconds: 3600 }
   }
 }
 

@@ -2318,8 +2318,6 @@
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "ลิงก์ OKX นี้ไม่มีรหัสเทรดเดอร์ผู้นำ (ตัวอักษรและตัวเลขสิบหกตัว หรือตัวเลขสิบแปดหลัก)",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "อ่านเทรดเดอร์ได้จาก Hyperliquid และ OKX เท่านั้น: โปรดวางที่อยู่ Hyperliquid หรือลิงก์โปรไฟล์ของเทรดเดอร์ผู้นำ OKX",
   "The baseline on paper": "กลยุทธ์อ้างอิงแบบจำลอง",
-  "The announcement reader stopped": "ตัวอ่านประกาศหยุดทำงานแล้ว",
-  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "การอ่านรายการประกาศของ Binance ล้มเหลวติดกันสามครั้ง ({error}) ตัวอ่านจึงถูกปิดไว้จนกว่าจะเปิดอีกครั้งที่ การตั้งค่า › ตลาด",
   "{asset} price": "ราคา {asset}",
   "24h change": "การเปลี่ยนแปลง 24 ชม.",
   "24h high": "สูงสุด 24 ชม.",
@@ -2431,11 +2429,9 @@
   "Session orders": "คำสั่งในเซสชัน",
   "No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange.": "ยังไม่มีคำสั่งจำลองในเซสชันนี้ คำสั่งที่นี่ไม่ถูกบันทึกถาวรและไม่ถูกส่งไปยังกระดานเทรดของคุณ",
   "This list is cleared when you leave the page — it isn't saved, isn't sent to any exchange, and doesn't feed your Portfolio or Positions.": "รายการนี้จะถูกล้างเมื่อคุณออกจากหน้านี้ — ไม่ถูกบันทึก ไม่ถูกส่งไปยังกระดานเทรดใด และไม่ถูกนำไปรวมในหน้า พอร์ต หรือ การถือครอง ของคุณ",
-  "Binance's announcements: the reader stopped itself at {time} after {count} reads in a row read nothing ({reason}). Switch it on again under Settings › Market.": "ประกาศของ Binance: ตัวอ่านหยุดเองเมื่อ {time} หลังจากอ่านแล้วไม่ได้อะไรเลยติดกัน {count} ครั้ง ({reason}) เปิดอีกครั้งได้ที่ การตั้งค่า › ตลาด",
   "Binance's announcements: not being read.": "ประกาศของ Binance: ไม่ได้อ่านอยู่",
   "Binance's announcements: not read yet.": "ประกาศของ Binance: ยังไม่ได้อ่าน",
   "Binance's announcements: last read {ago} ago.": "ประกาศของ Binance: อ่านล่าสุดเมื่อ {ago}ที่แล้ว",
-  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it stops itself.": "ประกาศของ Binance: อ่านล่าสุดเมื่อ {ago}ที่แล้ว อ่านแล้วไม่ได้อะไรเลยติดกัน {count} ครั้ง ({error}); เมื่อครบ {stop} ครั้ง ตัวอ่านจะหยุดเอง",
   "Binance's announcements: last read {ago} ago, in part ({error}).": "ประกาศของ Binance: อ่านล่าสุดเมื่อ {ago}ที่แล้ว อ่านได้เพียงบางส่วน ({error})",
   "{switch}: already on.": "{switch}: เปิดอยู่แล้ว",
   "{switch}: switched on.": "{switch}: จะเปิดใช้",
@@ -2577,5 +2573,11 @@
   "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "ยังไม่มีการคาดการณ์รายวัน จะสร้างหลังเริ่มวันใหม่เวลา 00:00 UTC เล็กน้อย",
   "Made {when}, from the day's open.": "สร้างเมื่อ {when} จากราคาเปิดของวัน",
   "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "การเคลื่อนไหวที่คาดไว้ไม่ว่าทางใดจากราคาเปิดวันนี้: ±{day1} ใน 1 วัน ±{days3} ใน 3 วัน ±{days7} ใน 7 วัน",
-  "The AI daily direction test": "การทดสอบทิศทางรายวันของ AI"
+  "The AI daily direction test": "การทดสอบทิศทางรายวันของ AI",
+  "The announcement reader cannot read": "ตัวอ่านประกาศอ่านไม่ได้",
+  "The announcement reader reads again": "ตัวอ่านประกาศอ่านได้อีกครั้ง",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader tries again every five minutes by itself, and says so when it reads again.": "การอ่านรายการประกาศของ Binance ล้มเหลวสามครั้งติดต่อกัน ({error}): ตัวอ่านจะลองใหม่เองทุกห้านาที และจะแจ้งเมื่ออ่านได้อีกครั้ง",
+  "Binance's announcement lists were read again, {count} minutes after the reader paused: it reads every minute again.": "อ่านรายการประกาศของ Binance ได้อีกครั้ง {count} นาทีหลังจากตัวอ่านหยุดชั่วคราว: ตอนนี้กลับมาอ่านทุกนาทีแล้ว",
+  "Binance's announcements: paused since {time}, after {count} reads in a row read nothing ({reason}); the reader tries again every five minutes by itself.": "ประกาศของ Binance: หยุดชั่วคราวตั้งแต่ {time} หลังจากอ่านไม่ได้อะไรเลย {count} ครั้งติดต่อกัน ({reason}); ตัวอ่านจะลองใหม่เองทุกห้านาที",
+  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it pauses and tries again every five minutes.": "ประกาศของ Binance: อ่านล่าสุดเมื่อ {ago} ที่แล้ว อ่านไม่ได้อะไรเลย {count} ครั้งติดต่อกัน ({error}); เมื่อถึง {stop} ครั้ง จะหยุดชั่วคราวและลองใหม่ทุกห้านาที"
 }

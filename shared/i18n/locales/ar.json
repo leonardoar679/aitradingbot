@@ -2318,8 +2318,6 @@
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "لا يذكر رابط OKX هذا رمز أي متداول رئيسي (ستة عشر حرفًا ورقمًا، أو ثمانية عشر رقمًا).",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "لا يُقرأ المتداولون إلا من Hyperliquid و OKX: الصق عنوان Hyperliquid أو رابط الملف الشخصي لمتداول رئيسي على OKX.",
   "The baseline on paper": "الاستراتيجية المرجعية تجريبيًا",
-  "The announcement reader stopped": "توقف قارئ الإعلانات",
-  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "فشلت ثلاث قراءات متتالية لقوائم إعلانات Binance ({error})، فأُوقف القارئ إلى أن يُشغَّل من جديد من الإعدادات › السوق.",
   "{asset} price": "سعر {asset}",
   "24h change": "التغيّر في 24 ساعة",
   "24h high": "أعلى سعر في 24 ساعة",
@@ -2431,11 +2429,9 @@
   "Session orders": "أوامر الجلسة",
   "No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange.": "لم تُوضع أي أوامر تجريبية بعد في هذه الجلسة. لا تُحفظ الأوامر هنا ولا تُرسل إلى منصتك.",
   "This list is cleared when you leave the page — it isn't saved, isn't sent to any exchange, and doesn't feed your Portfolio or Positions.": "تُمسح هذه القائمة عند مغادرتك الصفحة — فهي لا تُحفظ، ولا تُرسل إلى أي منصة، ولا تغذّي المحفظة أو المراكز لديك.",
-  "Binance's announcements: the reader stopped itself at {time} after {count} reads in a row read nothing ({reason}). Switch it on again under Settings › Market.": "إعلانات Binance: أوقف القارئ نفسه عند {time} بعد {count} من القراءات المتتالية دون أن تقرأ شيئًا ({reason}). شغّله من جديد من الإعدادات › السوق.",
   "Binance's announcements: not being read.": "إعلانات Binance: لا تُقرأ حاليًا.",
   "Binance's announcements: not read yet.": "إعلانات Binance: لم تُقرأ بعد.",
   "Binance's announcements: last read {ago} ago.": "إعلانات Binance: آخر قراءة منذ {ago}.",
-  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it stops itself.": { "one": "إعلانات Binance: آخر قراءة منذ {ago}، ولم يُقرأ شيء في القراءة الأخيرة ({error})؛ ويتوقف القارئ من تلقاء نفسه عند {stop}.", "two": "إعلانات Binance: آخر قراءة منذ {ago}، ولم يُقرأ شيء في آخر قراءتين متتاليتين ({error})؛ ويتوقف القارئ من تلقاء نفسه عند {stop}.", "few": "إعلانات Binance: آخر قراءة منذ {ago}، ولم يُقرأ شيء في آخر {count} قراءات متتالية ({error})؛ ويتوقف القارئ من تلقاء نفسه عند {stop}.", "many": "إعلانات Binance: آخر قراءة منذ {ago}، ولم يُقرأ شيء في آخر {count} قراءة متتالية ({error})؛ ويتوقف القارئ من تلقاء نفسه عند {stop}.", "other": "إعلانات Binance: آخر قراءة منذ {ago}، ولم يُقرأ شيء في آخر {count} قراءة متتالية ({error})؛ ويتوقف القارئ من تلقاء نفسه عند {stop}." },
   "Binance's announcements: last read {ago} ago, in part ({error}).": "إعلانات Binance: آخر قراءة منذ {ago}، وكانت جزئية ({error}).",
   "{switch}: already on.": "{switch}: قيد التشغيل بالفعل.",
   "{switch}: switched on.": "تشغيل {switch}.",
@@ -2577,5 +2573,11 @@
   "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "لا يوجد توقع يومي بعد: يُعدّ بعد افتتاح كل يوم في 00:00 UTC بقليل.",
   "Made {when}, from the day's open.": "أُعدّ {when}، من افتتاح اليوم.",
   "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "الحركة المتوقعة في أي اتجاه من افتتاح اليوم: ±{day1} خلال يوم، و±{days3} خلال ثلاثة، و±{days7} خلال سبعة.",
-  "The AI daily direction test": "اختبار الاتجاه اليومي للذكاء الاصطناعي"
+  "The AI daily direction test": "اختبار الاتجاه اليومي للذكاء الاصطناعي",
+  "The announcement reader cannot read": "قارئ الإعلانات لا يستطيع القراءة",
+  "The announcement reader reads again": "قارئ الإعلانات يقرأ من جديد",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader tries again every five minutes by itself, and says so when it reads again.": "فشلت ثلاث قراءات متتالية لقوائم إعلانات Binance ({error}): يعيد القارئ المحاولة من تلقاء نفسه كل خمس دقائق، ويُبلغ عندما يقرأ من جديد.",
+  "Binance's announcement lists were read again, {count} minutes after the reader paused: it reads every minute again.": {"one": "قُرئت قوائم إعلانات Binance من جديد بعد دقيقة واحدة من توقف القارئ مؤقتًا: وهو يقرأ كل دقيقة من جديد.", "two": "قُرئت قوائم إعلانات Binance من جديد بعد دقيقتين من توقف القارئ مؤقتًا: وهو يقرأ كل دقيقة من جديد.", "few": "قُرئت قوائم إعلانات Binance من جديد بعد {count} دقائق من توقف القارئ مؤقتًا: وهو يقرأ كل دقيقة من جديد.", "many": "قُرئت قوائم إعلانات Binance من جديد بعد {count} دقيقة من توقف القارئ مؤقتًا: وهو يقرأ كل دقيقة من جديد.", "other": "قُرئت قوائم إعلانات Binance من جديد بعد {count} دقيقة من توقف القارئ مؤقتًا: وهو يقرأ كل دقيقة من جديد."},
+  "Binance's announcements: paused since {time}, after {count} reads in a row read nothing ({reason}); the reader tries again every five minutes by itself.": "إعلانات Binance: متوقفة مؤقتًا منذ {time} بعد {count} من القراءات المتتالية دون أن تقرأ شيئًا ({reason})؛ ويعيد القارئ المحاولة من تلقاء نفسه كل خمس دقائق.",
+  "Binance's announcements: last read {ago} ago, reading nothing {count} times in a row ({error}); at {stop} it pauses and tries again every five minutes.": {"one": "إعلانات Binance: آخر قراءة منذ {ago}، ولم يُقرأ شيء في القراءة الأخيرة ({error})؛ وعند {stop} يتوقف القارئ مؤقتًا ويعيد المحاولة كل خمس دقائق.", "two": "إعلانات Binance: آخر قراءة منذ {ago}، ولم يُقرأ شيء في آخر قراءتين متتاليتين ({error})؛ وعند {stop} يتوقف القارئ مؤقتًا ويعيد المحاولة كل خمس دقائق.", "few": "إعلانات Binance: آخر قراءة منذ {ago}، ولم يُقرأ شيء في آخر {count} قراءات متتالية ({error})؛ وعند {stop} يتوقف القارئ مؤقتًا ويعيد المحاولة كل خمس دقائق.", "many": "إعلانات Binance: آخر قراءة منذ {ago}، ولم يُقرأ شيء في آخر {count} قراءة متتالية ({error})؛ وعند {stop} يتوقف القارئ مؤقتًا ويعيد المحاولة كل خمس دقائق.", "other": "إعلانات Binance: آخر قراءة منذ {ago}، ولم يُقرأ شيء في آخر {count} قراءة متتالية ({error})؛ وعند {stop} يتوقف القارئ مؤقتًا ويعيد المحاولة كل خمس دقائق."}
 }
